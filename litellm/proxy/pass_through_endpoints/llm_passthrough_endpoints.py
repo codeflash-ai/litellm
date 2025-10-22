@@ -38,6 +38,7 @@ from litellm.proxy.utils import is_known_model
 from litellm.secret_managers.main import get_secret_str
 
 from .passthrough_endpoint_router import PassthroughEndpointRouter
+import asyncio
 
 vertex_llm_base = VertexBase()
 router = APIRouter()
@@ -86,6 +87,8 @@ async def llm_passthrough_factory_proxy_route(
     """
     Factory function for creating pass-through endpoints for LLM providers.
     """
+    from litellm.proxy.pass_through_endpoints.llm_passthrough_endpoints import \
+        passthrough_endpoint_router
     from litellm.types.utils import LlmProviders
     from litellm.utils import ProviderConfigManager
 
@@ -124,11 +127,38 @@ async def llm_passthrough_factory_proxy_route(
         full_path = f"{base_path}/{clean_path}"
         updated_url = base_url.copy_with(path=full_path)
 
-    # Add or update query parameters
-    provider_api_key = passthrough_endpoint_router.get_credentials(
-        custom_llm_provider=custom_llm_provider,
-        region_name=None,
-    )
+    # Use asyncio.gather for concurrent I/O if POST (stream-detection and credential lookup can be parallelized)
+    provider_api_key, is_streaming_request = None, False
+    if request.method == "POST":
+        content_type = request.headers.get("content-type", "")
+        gather_tasks = []
+
+        # Both tasks below are I/O bound, can run concurrently
+        gather_tasks.append(
+            passthrough_endpoint_router.get_credentials(
+                custom_llm_provider=custom_llm_provider,
+                region_name=None,
+            )
+        )
+
+        if "multipart/form-data" not in content_type:
+            gather_tasks.append(request.json())
+        else:
+            gather_tasks.append(get_form_data(request))
+
+        # Run the credential and request-body lookup in parallel
+        results = await asyncio.gather(*gather_tasks)
+        provider_api_key = results[0]
+        _request_body = results[1]
+
+        if _request_body.get("stream"):
+            is_streaming_request = True
+    else:
+        # For non-POST, credentials are still required (serial since only one call)
+        provider_api_key = passthrough_endpoint_router.get_credentials(
+            custom_llm_provider=custom_llm_provider,
+            region_name=None,
+        )
 
     auth_headers = provider_config.validate_environment(
         headers={},
@@ -139,18 +169,6 @@ async def llm_passthrough_factory_proxy_route(
         api_key=provider_api_key,
         api_base=base_target_url,
     )
-
-    ## check for streaming
-    is_streaming_request = False
-    # anthropic is streaming when 'stream' = True is in the body
-    if request.method == "POST":
-        if "multipart/form-data" not in request.headers.get("content-type", ""):
-            _request_body = await request.json()
-        else:
-            _request_body = await get_form_data(request)
-
-        if _request_body.get("stream"):
-            is_streaming_request = True
 
     ## CREATE PASS-THROUGH
     endpoint_func = create_pass_through_route(
