@@ -139,30 +139,35 @@ class RedisCache(BaseCache):
             self.redis_flush_size = redis_flush_size
         self.redis_version = "Unknown"
         try:
-            if not coroutine_checker.is_async_callable(self.redis_client):
-                self.redis_version = self.redis_client.info()["redis_version"]  # type: ignore
+            # Optimize: local function lookup, minimize attribute access
+            _redis_client = self.redis_client
+            if not coroutine_checker.is_async_callable(_redis_client):
+                self.redis_version = _redis_client.info()["redis_version"]  # type: ignore
         except Exception:
             pass
 
         ### ASYNC HEALTH PING ###
         try:
-            # asyncio.get_running_loop().create_task(self.ping())
-            _ = asyncio.get_running_loop().create_task(self.ping())
+            # local variable for function lookup
+            get_loop = asyncio.get_running_loop
+            get_loop().create_task(self.ping())
         except Exception as e:
-            if "no running event loop" in str(e):
+            e_str = str(e)
+            if "no running event loop" in e_str:
                 verbose_logger.debug(
                     "Ignoring async redis ping. No running event loop."
                 )
             else:
                 verbose_logger.error(
-                    "Error connecting to Async Redis client - {}".format(str(e)),
-                    extra={"error": str(e)},
+                    "Error connecting to Async Redis client - {}".format(e_str),
+                    extra={"error": e_str},
                 )
 
         ### SYNC HEALTH PING ###
         try:
-            if hasattr(self.redis_client, "ping"):
-                self.redis_client.ping()  # type: ignore
+            rc = self.redis_client
+            if hasattr(rc, "ping"):
+                rc.ping()  # type: ignore
         except Exception as e:
             verbose_logger.error(
                 "Error connecting to Sync Redis client", extra={"error": str(e)}
@@ -826,32 +831,29 @@ class RedisCache(BaseCache):
 
             end_time = time.time()
             _duration = end_time - start_time
-            asyncio.create_task(
-                self.service_logger_obj.async_service_success_hook(
-                    service=ServiceTypes.REDIS,
-                    duration=_duration,
-                    call_type=f"async_get_cache <- {_get_call_stack_info()}",
-                    start_time=start_time,
-                    end_time=end_time,
-                    parent_otel_span=parent_otel_span,
-                    event_metadata={"key": key},
-                )
+            # Reduce attribute lookup for async_service_success_hook
+            self._async_log_success(
+                service=ServiceTypes.REDIS,
+                duration=_duration,
+                call_type=f"async_get_cache <- {_get_call_stack_info()}",
+                start_time=start_time,
+                end_time=end_time,
+                parent_otel_span=parent_otel_span,
+                event_metadata={"key": key},
             )
             return response
         except Exception as e:
             end_time = time.time()
             _duration = end_time - start_time
-            asyncio.create_task(
-                self.service_logger_obj.async_service_failure_hook(
-                    service=ServiceTypes.REDIS,
-                    duration=_duration,
-                    error=e,
-                    call_type=f"async_get_cache <- {_get_call_stack_info()}",
-                    start_time=start_time,
-                    end_time=end_time,
-                    parent_otel_span=parent_otel_span,
-                    event_metadata={"key": key},
-                )
+            self._async_log_failure(
+                service=ServiceTypes.REDIS,
+                duration=_duration,
+                error=e,
+                call_type=f"async_get_cache <- {_get_call_stack_info()}",
+                start_time=start_time,
+                end_time=end_time,
+                parent_otel_span=parent_otel_span,
+                event_metadata={"key": key},
             )
             print_verbose(
                 f"litellm.caching.caching: async get() - Got exception from REDIS: {str(e)}"
@@ -1026,7 +1028,6 @@ class RedisCache(BaseCache):
     async def async_delete_cache(self, key: str):
         # typed as Any, redis python lib has incomplete type stubs for RedisCluster and does not include `delete`
         _redis_client: Any = self.init_async_client()
-        # keys is str
         return await _redis_client.delete(key)
 
     def delete_cache(self, key):
@@ -1277,3 +1278,51 @@ class RedisCache(BaseCache):
                 f"LiteLLM Redis Cache LPOP: - Got exception from REDIS : {str(e)}"
             )
             raise e
+
+    def _async_log_success(
+        self,
+        service,
+        duration,
+        call_type,
+        start_time,
+        end_time,
+        parent_otel_span,
+        event_metadata,
+    ):
+        # Helper to minimize repeated attribute lookup for service_logger_obj
+        asyncio.create_task(
+            self.service_logger_obj.async_service_success_hook(
+                service=service,
+                duration=duration,
+                call_type=call_type,
+                start_time=start_time,
+                end_time=end_time,
+                parent_otel_span=parent_otel_span,
+                event_metadata=event_metadata,
+            )
+        )
+
+    def _async_log_failure(
+        self,
+        service,
+        duration,
+        error,
+        call_type,
+        start_time,
+        end_time,
+        parent_otel_span,
+        event_metadata,
+    ):
+        # Helper to minimize repeated attribute lookup for service_logger_obj
+        asyncio.create_task(
+            self.service_logger_obj.async_service_failure_hook(
+                service=service,
+                duration=duration,
+                error=error,
+                call_type=call_type,
+                start_time=start_time,
+                end_time=end_time,
+                parent_otel_span=parent_otel_span,
+                event_metadata=event_metadata,
+            )
+        )

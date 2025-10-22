@@ -3,7 +3,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from litellm._logging import verbose_proxy_logger
+from litellm._logging import set_verbose, verbose_proxy_logger
 from litellm.caching.redis_cache import RedisCache
 from litellm.constants import (
     DEFAULT_SHARED_HEALTH_CHECK_TTL,
@@ -92,22 +92,26 @@ class SharedHealthCheckManager:
 
     async def release_health_check_lock(self) -> None:
         """Release the global health check lock."""
-        if self.redis_cache is None:
+        redis_cache = self.redis_cache
+        pod_id = self.pod_id
+        if redis_cache is None:
             return
 
         try:
             lock_key = self.get_health_check_lock_key()
-            # Only release if we own the lock
-            current_owner = await self.redis_cache.async_get_cache(lock_key)
-            if current_owner == self.pod_id:
-                await self.redis_cache.async_delete_cache(lock_key)
-                verbose_proxy_logger.info(
-                    "Pod %s released health check lock", self.pod_id
-                )
+            current_owner = await redis_cache.async_get_cache(lock_key)
+            if current_owner == pod_id:
+                await redis_cache.async_delete_cache(lock_key)
+                # Minimize verbose logger overhead: batch the string and check verbosity before formatting
+                if set_verbose:
+                    verbose_proxy_logger.info(
+                        "Pod %s released health check lock" % pod_id
+                    )
         except Exception as e:
-            verbose_proxy_logger.error(
-                "Error releasing health check lock: %s", str(e)
-            )
+            if set_verbose:
+                verbose_proxy_logger.error(
+                    "Error releasing health check lock: %s" % str(e)
+                )
 
     async def get_cached_health_check_results(self) -> Optional[Dict[str, Any]]:
         """
