@@ -128,7 +128,7 @@ class SharedHealthCheckManager:
 
             # Parse the cached data
             if isinstance(cached_data, str):
-                cached_results = json.loads(cached_data)
+                cached_results = await asyncio.to_thread(json.loads, cached_data)
             else:
                 cached_results = cached_data
 

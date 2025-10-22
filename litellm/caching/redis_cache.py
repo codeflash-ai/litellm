@@ -822,7 +822,8 @@ class RedisCache(BaseCache):
             print_verbose(
                 f"Got Async Redis Cache: key: {key}, cached_response {cached_response}"
             )
-            response = self._get_cache_logic(cached_response=cached_response)
+            # Parse cached response off the event loop if it is potentially blocking (large payload etc)
+            response = await asyncio.to_thread(self._get_cache_logic, cached_response)
 
             end_time = time.time()
             _duration = end_time - start_time
