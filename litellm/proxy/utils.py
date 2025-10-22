@@ -97,6 +97,8 @@ from litellm.types.mcp import (
 )
 from litellm.types.utils import LLMResponseTypes, LoggedLiteLLMParams
 
+_model_names_cache = {}
+
 if TYPE_CHECKING:
     from opentelemetry.trace import Span as _Span
 
@@ -3604,15 +3606,15 @@ def is_known_model(model: Optional[str], llm_router: Optional[Router]) -> bool:
     """
     if model is None or llm_router is None:
         return False
-    model_names = llm_router.get_model_names()
 
-    model_names_set = set(model_names)
+    cache_key = id(llm_router)
+    model_names_set = _model_names_cache.get(cache_key)
+    if model_names_set is None:
+        model_names = llm_router.get_model_names()
+        model_names_set = set(model_names)
+        _model_names_cache[cache_key] = model_names_set
 
-    is_in_list = False
-    if model in model_names_set:
-        is_in_list = True
-
-    return is_in_list
+    return model in model_names_set
 
 
 def join_paths(base_path: str, route: str) -> str:
