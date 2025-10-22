@@ -11,39 +11,46 @@ from .pillar import (
     PillarGuardrailAPIError,
     PillarGuardrailMissingSecrets,
 )
+import litellm
 
 if TYPE_CHECKING:
     from litellm.types.guardrails import Guardrail, LitellmParams
 
 
 def initialize_guardrail(litellm_params: "LitellmParams", guardrail: "Guardrail"):
-    import litellm
-
     guardrail_name = guardrail.get("guardrail_name")
     if not guardrail_name:
         raise ValueError("Pillar guardrail name is required")
 
+    # Avoid repeated getattr for "optional_params"
     optional_params = getattr(litellm_params, "optional_params", None)
+
+    # Avoid repeated getattr for on_flagged_action using a local variable
+    on_flagged_action = getattr(litellm_params, "on_flagged_action", "monitor")
+
+    # Compute config values in advance to minimize repeated _get_config_value function calls
+    async_mode = _get_config_value(litellm_params, optional_params, "async_mode")
+    persist_session = _get_config_value(
+        litellm_params, optional_params, "persist_session"
+    )
+    include_scanners = _get_config_value(
+        litellm_params, optional_params, "include_scanners"
+    )
+    include_evidence = _get_config_value(
+        litellm_params, optional_params, "include_evidence"
+    )
 
     _pillar_callback = PillarGuardrail(
         guardrail_name=guardrail_name,
         api_key=litellm_params.api_key,
         api_base=litellm_params.api_base,
-        on_flagged_action=getattr(litellm_params, "on_flagged_action", "monitor"),
+        on_flagged_action=on_flagged_action,
         event_hook=litellm_params.mode,
         default_on=litellm_params.default_on,
-        async_mode=_get_config_value(
-            litellm_params, optional_params, "async_mode"
-        ),
-        persist_session=_get_config_value(
-            litellm_params, optional_params, "persist_session"
-        ),
-        include_scanners=_get_config_value(
-            litellm_params, optional_params, "include_scanners"
-        ),
-        include_evidence=_get_config_value(
-            litellm_params, optional_params, "include_evidence"
-        ),
+        async_mode=async_mode,
+        persist_session=persist_session,
+        include_scanners=include_scanners,
+        include_evidence=include_evidence,
     )
     litellm.logging_callback_manager.add_litellm_callback(_pillar_callback)
 
