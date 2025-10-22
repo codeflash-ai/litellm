@@ -1,4 +1,3 @@
-import types
 from typing import List, Optional
 
 from openai.types.image import Image
@@ -49,28 +48,24 @@ class AmazonStabilityConfig:
         width: Optional[int] = None,
         height: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        if cfg_scale is not None:
+            setattr(self.__class__, "cfg_scale", cfg_scale)
+        if seed is not None:
+            setattr(self.__class__, "seed", seed)
+        if steps is not None:
+            setattr(self.__class__, "steps", steps)
+        if width is not None:
+            setattr(self.__class__, "width", width)
+        if height is not None:
+            setattr(self.__class__, "height", height)
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        # Avoid types.FunctionType etc by using a fixed set of attribute names known for this class
+        # This is safe since the class only uses these variables per domain knowledge, and avoids repeated isinstance/calls
+        attrs = ("cfg_scale", "seed", "steps", "width", "height")
+        # This is faster: only directly access these valid attributes, skip filtering whole __dict__ by unwanted types
+        return {k: getattr(cls, k) for k in attrs if getattr(cls, k, None) is not None}
 
     @classmethod
     def get_supported_openai_params(cls, model: Optional[str] = None) -> List:
