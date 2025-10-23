@@ -109,7 +109,7 @@ def _process_gemini_image(image_url: str, format: Optional[str] = None) -> PartT
 def _snake_to_camel(snake_str: str) -> str:
     """Convert snake_case to camelCase"""
     components = snake_str.split("_")
-    return components[0] + "".join(x.capitalize() for x in components[1:])
+    return components[0] + "".join([x.capitalize() for x in components[1:]])
 
 
 def _camel_to_snake(camel_str: str) -> str:
@@ -524,9 +524,9 @@ def sync_transform_request_body(
     context_caching_endpoints = ContextCachingEndpoints()
 
     (
-    messages,
-    optional_params,
-    cached_content,
+        messages,
+        optional_params,
+        cached_content,
     ) = context_caching_endpoints.check_and_create_cache(
         messages=messages,
         optional_params=optional_params,
@@ -543,7 +543,6 @@ def sync_transform_request_body(
         vertex_location=vertex_location,
         vertex_auth_header=vertex_auth_header,
     )
-
 
     return _transform_request_body(
         messages=messages,
@@ -576,9 +575,9 @@ async def async_transform_request_body(
     context_caching_endpoints = ContextCachingEndpoints()
 
     (
-    messages,
-    optional_params,
-    cached_content,
+        messages,
+        optional_params,
+        cached_content,
     ) = await context_caching_endpoints.async_check_and_create_cache(
         messages=messages,
         optional_params=optional_params,
