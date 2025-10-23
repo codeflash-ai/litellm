@@ -63,28 +63,41 @@ class PalmConfig:
         top_p: Optional[float] = None,
         max_output_tokens: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Directly set non-None params as class attributes, avoid copying entire locals and repeated lookup
+        if context is not None:
+            self.__class__.context = context
+        if examples is not None:
+            self.__class__.examples = examples
+        if temperature is not None:
+            self.__class__.temperature = temperature
+        if candidate_count is not None:
+            self.__class__.candidate_count = candidate_count
+        if top_k is not None:
+            self.__class__.top_k = top_k
+        if top_p is not None:
+            self.__class__.top_p = top_p
+        if max_output_tokens is not None:
+            self.__class__.max_output_tokens = max_output_tokens
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        # Optimize filtering by flat out excluding special attributes and known callables, skip is not None check first
+        exclude_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
+        # Dict comprehension, avoid repeated calls, restrict lookups to only attributes in __dict__ and non-callables
+        cfg = {}
+        for k, v in cls.__dict__.items():
+            if (
+                not k.startswith("__")
+                and not isinstance(v, exclude_types)
+                and v is not None
+            ):
+                cfg[k] = v
+        return cfg
 
 
 def completion(
