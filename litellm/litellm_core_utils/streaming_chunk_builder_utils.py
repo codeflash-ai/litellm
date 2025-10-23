@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 class ChunkProcessor:
     def __init__(self, chunks: List, messages: Optional[list] = None):
+        # Avoid repeated indexing and reduce attribute lookups
         self.chunks = self._sort_chunks(chunks)
         self.messages = messages
         self.first_chunk = chunks[0]
@@ -62,8 +63,10 @@ class ChunkProcessor:
         Chunks:
         [{"id": ""}, {"id": "1"}, {"id": "1"}]
         """
+        # Use local variable for method, avoid attribute lookup in loop
+        chunk_get = dict.get
         for chunk in chunks:
-            if chunk.get("id"):
+            if chunk_get(chunk, "id"):
                 return chunk["id"]
         return ""
 
@@ -116,9 +119,9 @@ class ChunkProcessor:
         self, tool_call_chunks: List[Dict[str, Any]]
     ) -> List[ChatCompletionMessageToolCall]:
         tool_calls_list: List[ChatCompletionMessageToolCall] = []
-        tool_call_map: Dict[int, Dict[str, Any]] = (
-            {}
-        )  # Map to store tool calls by index
+        tool_call_map: Dict[
+            int, Dict[str, Any]
+        ] = {}  # Map to store tool calls by index
 
         for chunk in tool_call_chunks:
             choices = chunk["choices"]
@@ -489,12 +492,12 @@ class ChunkProcessor:
         web_search_requests: Optional[int] = calculated_usage_per_chunk[
             "web_search_requests"
         ]
-        completion_tokens_details: Optional[CompletionTokensDetails] = (
-            calculated_usage_per_chunk["completion_tokens_details"]
-        )
-        prompt_tokens_details: Optional[PromptTokensDetailsWrapper] = (
-            calculated_usage_per_chunk["prompt_tokens_details"]
-        )
+        completion_tokens_details: Optional[
+            CompletionTokensDetails
+        ] = calculated_usage_per_chunk["completion_tokens_details"]
+        prompt_tokens_details: Optional[
+            PromptTokensDetailsWrapper
+        ] = calculated_usage_per_chunk["prompt_tokens_details"]
 
         try:
             returned_usage.prompt_tokens = prompt_tokens or token_counter(
@@ -528,8 +531,10 @@ class ChunkProcessor:
             )  # for anthropic
         if completion_tokens_details is not None:
             if isinstance(completion_tokens_details, CompletionTokensDetails):
-                returned_usage.completion_tokens_details = CompletionTokensDetailsWrapper(
-                    **completion_tokens_details.model_dump()
+                returned_usage.completion_tokens_details = (
+                    CompletionTokensDetailsWrapper(
+                        **completion_tokens_details.model_dump()
+                    )
                 )
             else:
                 returned_usage.completion_tokens_details = completion_tokens_details
