@@ -86,10 +86,18 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Avoid the unnecessary copying and call to locals()
+        # Instead, directly set attributes for non-None args (excluding self)
+        if maxTokens is not None:
+            setattr(self.__class__, "maxTokens", maxTokens)
+        if stopSequences is not None:
+            setattr(self.__class__, "stopSequences", stopSequences)
+        if temperature is not None:
+            setattr(self.__class__, "temperature", temperature)
+        if topP is not None:
+            setattr(self.__class__, "topP", topP)
+        if topK is not None:
+            setattr(self.__class__, "topK", topK)
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -384,17 +392,15 @@ class AmazonConverseConfig(BaseConfig):
         """Transform computer use tools to Bedrock format."""
         transformed_tools: List[dict] = []
 
+        # Pre-compute prefix tuple for efficient search
+        bedrock_prefixes = tuple(BEDROCK_COMPUTER_USE_TOOLS)
+
         for tool in computer_use_tools:
             tool_type = tool.get("type", "")
 
-            # Check if this is a computer use tool with the startswith method
-            is_computer_use_tool = False
-            for computer_use_prefix in BEDROCK_COMPUTER_USE_TOOLS:
-                if tool_type.startswith(computer_use_prefix):
-                    is_computer_use_tool = True
-                    break
+            # Fast prefix check: this is equivalent to original loop
+            is_computer_use_tool = tool_type.startswith(bedrock_prefixes)
 
-            transformed_tool: dict = {}
             if is_computer_use_tool:
                 if tool_type.startswith("computer_") and "function" in tool:
                     # Computer use tool with function format
@@ -405,8 +411,8 @@ class AmazonConverseConfig(BaseConfig):
                         **func.get("parameters", {}),
                     }
                 else:
-                    # Direct tools - just need to ensure name is present
                     transformed_tool = dict(tool)
+                    # Reorder checks to avoid unnecessary string checks
                     if "name" not in transformed_tool:
                         if tool_type.startswith("bash_"):
                             transformed_tool["name"] = "bash"
@@ -879,9 +885,11 @@ class AmazonConverseConfig(BaseConfig):
                 )
 
         # Prepare and separate parameters
-        inference_params, additional_request_params, request_metadata = (
-            self._prepare_request_params(optional_params, model)
-        )
+        (
+            inference_params,
+            additional_request_params,
+            request_metadata,
+        ) = self._prepare_request_params(optional_params, model)
 
         original_tools = inference_params.pop("tools", [])
 
@@ -1167,7 +1175,9 @@ class AmazonConverseConfig(BaseConfig):
 
         return message, returned_finish_reason
 
-    def _translate_message_content(self, content_blocks: List[ContentBlock]) -> Tuple[
+    def _translate_message_content(
+        self, content_blocks: List[ContentBlock]
+    ) -> Tuple[
         str,
         List[ChatCompletionToolCallChunk],
         Optional[List[BedrockConverseReasoningContentBlock]],
@@ -1182,9 +1192,9 @@ class AmazonConverseConfig(BaseConfig):
         """
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
         for idx, content in enumerate(content_blocks):
             """
             - Content is either a tool response or text
@@ -1305,9 +1315,9 @@ class AmazonConverseConfig(BaseConfig):
         chat_completion_message: ChatCompletionResponseMessage = {"role": "assistant"}
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
 
         if message is not None:
             (
@@ -1320,12 +1330,12 @@ class AmazonConverseConfig(BaseConfig):
             chat_completion_message["provider_specific_fields"] = {
                 "reasoningContentBlocks": reasoningContentBlocks,
             }
-            chat_completion_message["reasoning_content"] = (
-                self._transform_reasoning_content(reasoningContentBlocks)
-            )
-            chat_completion_message["thinking_blocks"] = (
-                self._transform_thinking_blocks(reasoningContentBlocks)
-            )
+            chat_completion_message[
+                "reasoning_content"
+            ] = self._transform_reasoning_content(reasoningContentBlocks)
+            chat_completion_message[
+                "thinking_blocks"
+            ] = self._transform_thinking_blocks(reasoningContentBlocks)
         chat_completion_message["content"] = content_str
         if (
             json_mode is True
