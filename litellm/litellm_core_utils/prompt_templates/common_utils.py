@@ -36,6 +36,9 @@ from litellm.types.utils import (
     SpecialEnums,
     StreamingChoices,
 )
+from litellm.proxy.openai_files_endpoints.common_utils import (
+    convert_b64_uid_to_unified_uid,
+)
 
 if TYPE_CHECKING:  # newer pattern to avoid importing pydantic objects on __init__.py
     from litellm.types.llms.openai import ChatCompletionImageObject
@@ -50,6 +53,10 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
+
+_UNIFIED_FILE_ID_REGEX = re.compile(
+    f"{SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value}:(.*?);unified_id"
+)
 
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
@@ -364,10 +371,6 @@ def get_format_from_file_id(file_id: Optional[str]) -> Optional[str]:
     unified_file_id = litellm_proxy:{};unified_id,{}
     If not a unified file id, returns 'file' as default format
     """
-    from litellm.proxy.openai_files_endpoints.common_utils import (
-        convert_b64_uid_to_unified_uid,
-    )
-
     if not file_id:
         return None
     try:
@@ -375,10 +378,7 @@ def get_format_from_file_id(file_id: Optional[str]) -> Optional[str]:
         if transformed_file_id.startswith(
             SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value
         ):
-            match = re.match(
-                f"{SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value}:(.*?);unified_id",
-                transformed_file_id,
-            )
+            match = _UNIFIED_FILE_ID_REGEX.match(transformed_file_id)
             if match:
                 return match.group(1)
 

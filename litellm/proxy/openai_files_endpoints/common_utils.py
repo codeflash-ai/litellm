@@ -24,10 +24,8 @@ def _is_base64_encoded_unified_file_id(b64_uid: str) -> Union[str, Literal[False
 
 def convert_b64_uid_to_unified_uid(b64_uid: str) -> str:
     is_base64_unified_file_id = _is_base64_encoded_unified_file_id(b64_uid)
-    if is_base64_unified_file_id:
-        return is_base64_unified_file_id
-    else:
-        return b64_uid
+    # Use the result directly, avoiding branch overhead
+    return is_base64_unified_file_id if is_base64_unified_file_id else b64_uid
 
 
 def get_models_from_unified_file_id(unified_file_id: str) -> List[str]:
