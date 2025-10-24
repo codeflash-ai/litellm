@@ -104,10 +104,11 @@ class AnthropicConfig(AnthropicModelInfo, BaseConfig):
         metadata: Optional[dict] = None,
         system: Optional[str] = None,
     ) -> None:
+        # Assign attributes to the instance (not class) for proper encapsulation and memory use.
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -339,24 +340,25 @@ class AnthropicConfig(AnthropicModelInfo, BaseConfig):
     def _map_stop_sequences(
         self, stop: Optional[Union[str, List[str]]]
     ) -> Optional[List[str]]:
-        new_stop: Optional[List[str]] = None
+        # Fast path: handle None upfront
+        if stop is None:
+            return None
+
+        drop_params = getattr(litellm, "drop_params", False)
+        # Fast branch for string input
         if isinstance(stop, str):
-            if (
-                stop.isspace() and litellm.drop_params is True
-            ):  # anthropic doesn't allow whitespace characters as stop-sequences
-                return new_stop
-            new_stop = [stop]
-        elif isinstance(stop, list):
-            new_v = []
-            for v in stop:
-                if (
-                    v.isspace() and litellm.drop_params is True
-                ):  # anthropic doesn't allow whitespace characters as stop-sequences
-                    continue
-                new_v.append(v)
-            if len(new_v) > 0:
-                new_stop = new_v
-        return new_stop
+            if stop.isspace() and drop_params:
+                return None
+            return [stop]
+        # Branch for list input; filter out whitespace strings if drop_params is True
+        if isinstance(stop, list):
+            if drop_params:
+                new_v = [v for v in stop if not (isinstance(v, str) and v.isspace())]
+            else:
+                new_v = list(stop)
+            return new_v if new_v else None
+        # For all other input types, fallback to None
+        return None
 
     @staticmethod
     def _map_reasoning_effort(
