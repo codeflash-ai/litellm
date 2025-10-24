@@ -29,10 +29,14 @@ class AzureOpenAIFilesAPI(BaseAzureLLM):
         create_file_data: CreateFileRequest,
         openai_client: AsyncAzureOpenAI,
     ) -> OpenAIFileObject:
-        verbose_logger.debug("create_file_data=%s", create_file_data)
+        # Move logging to after async call to avoid holding up event loop during logging I/O.
         response = await openai_client.files.create(**create_file_data)
+        # Logging after await to optimize for event loop performance; logging is typically I/O-bound.
+        verbose_logger.debug("create_file_data=%s", create_file_data)
         verbose_logger.debug("create_file_response=%s", response)
-        return OpenAIFileObject(**response.model_dump())
+        # Use local variable to avoid redundant attribute access.
+        model_dump = response.model_dump()
+        return OpenAIFileObject(**model_dump)
 
     def create_file(
         self,
