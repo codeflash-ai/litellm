@@ -5,6 +5,7 @@ Common utilities used across bedrock chat/embedding/image generation
 import json
 import os
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Union
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from litellm.types.llms.bedrock import BedrockCreateBatchRequest
@@ -405,6 +406,7 @@ class BedrockModelInfo(BaseLLMModelInfo):
         return model
 
     @staticmethod
+    @lru_cache(maxsize=2048)
     def get_base_model(model: str) -> str:
         """
         Get the base model from the given model name.
