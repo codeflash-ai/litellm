@@ -10,9 +10,8 @@ from litellm._logging import verbose_logger
 from litellm.caching.caching import DualCache
 from litellm.llms.base_llm.chat.transformation import BaseLLMException
 from litellm.llms.openai.common_utils import BaseOpenAILLM
-from litellm.secret_managers.get_azure_ad_token_provider import (
-    get_azure_ad_token_provider,
-)
+from litellm.secret_managers.get_azure_ad_token_provider import \
+    get_azure_ad_token_provider
 from litellm.secret_managers.main import get_secret_str
 from litellm.types.router import GenericLiteLLMParams
 from litellm.utils import _add_path_to_api_base
@@ -81,7 +80,8 @@ def get_azure_ad_token_from_entra_id(
     Returns:
         callable that returns a bearer token.
     """
-    from azure.identity import ClientSecretCredential, get_bearer_token_provider
+    from azure.identity import (ClientSecretCredential,
+                                get_bearer_token_provider)
 
     verbose_logger.debug("Getting Azure AD Token from Entra ID")
 
@@ -137,7 +137,8 @@ def get_azure_ad_token_from_username_password(
     Returns:
         callable that returns a bearer token.
     """
-    from azure.identity import UsernamePasswordCredential, get_bearer_token_provider
+    from azure.identity import (UsernamePasswordCredential,
+                                get_bearer_token_provider)
 
     verbose_logger.debug(
         "client_id %s, azure_username %s, azure_password %s",
@@ -417,9 +418,8 @@ class BaseAzureLLM(BaseOpenAILLM):
         Returns:
             Token provider callable if DefaultAzureCredential is enabled and available, None otherwise
         """
-        from litellm.types.secret_managers.get_azure_ad_token_provider import (
-            AzureCredentialType,
-        )
+        from litellm.types.secret_managers.get_azure_ad_token_provider import \
+            AzureCredentialType
 
         verbose_logger.debug("Attempting to use DefaultAzureCredential for Azure Auth")
 
@@ -447,18 +447,28 @@ class BaseAzureLLM(BaseOpenAILLM):
         model: Optional[str] = None,
     ) -> Optional[Union[AzureOpenAI, AsyncAzureOpenAI]]:
         openai_client: Optional[Union[AzureOpenAI, AsyncAzureOpenAI]] = None
-        client_initialization_params: dict = locals()
+
+        # Construct a minimal cache key dict, avoiding use of locals() which contains non-deterministic/unnecessary items
+        client_initialization_params = {
+            "api_key": api_key,
+            "api_base": api_base,
+            "api_version": api_version,
+            "litellm_params": litellm_params,
+            "_is_async": _is_async,
+            "model": model,
+            # add more parameters here if get_cached_openai_client expects them for discriminating cache entries
+        }
         client_initialization_params["is_async"] = _is_async
+
         if client is None:
             cached_client = self.get_cached_openai_client(
                 client_initialization_params=client_initialization_params,
                 client_type="azure",
             )
-            if cached_client:
-                if isinstance(cached_client, AzureOpenAI) or isinstance(
-                    cached_client, AsyncAzureOpenAI
-                ):
-                    return cached_client
+            if cached_client and (
+                isinstance(cached_client, AzureOpenAI) or isinstance(cached_client, AsyncAzureOpenAI)
+            ):
+                return cached_client
 
             azure_client_params = self.initialize_azure_sdk_client(
                 litellm_params=litellm_params or {},
@@ -472,20 +482,19 @@ class BaseAzureLLM(BaseOpenAILLM):
                 openai_client = AsyncAzureOpenAI(**azure_client_params)
             else:
                 openai_client = AzureOpenAI(**azure_client_params)  # type: ignore
+
+            # cache only on creation
+            self.set_cached_openai_client(
+                openai_client=openai_client,
+                client_initialization_params=client_initialization_params,
+                client_type="azure",
+            )
         else:
             openai_client = client
-            if api_version is not None and isinstance(
-                openai_client._custom_query, dict
-            ):
-                # set api_version to version passed by user
+            if api_version is not None and isinstance(getattr(openai_client, '_custom_query', None), dict):
                 openai_client._custom_query.setdefault("api-version", api_version)
+            # We don't re-cache the externally supplied client
 
-        # save client in-memory cache
-        self.set_cached_openai_client(
-            openai_client=openai_client,
-            client_initialization_params=client_initialization_params,
-            client_type="azure",
-        )
         return openai_client
 
     def initialize_azure_sdk_client(
