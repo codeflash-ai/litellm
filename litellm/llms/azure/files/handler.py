@@ -109,7 +109,7 @@ class AzureOpenAIFilesAPI(BaseAzureLLM):
                 "AzureOpenAI client is not initialized. Make sure api_key is passed or OPENAI_API_KEY is set in the environment."
             )
 
-        if _is_async is True:
+        if _is_async:
             if not isinstance(openai_client, AsyncAzureOpenAI):
                 raise ValueError(
                     "AzureOpenAI client is not an instance of AsyncAzureOpenAI. Make sure you passed an AsyncAzureOpenAI client."
@@ -118,10 +118,10 @@ class AzureOpenAIFilesAPI(BaseAzureLLM):
                 file_content_request=file_content_request,
                 openai_client=openai_client,
             )
+        # Synchronous path
         response = cast(AzureOpenAI, openai_client).files.content(
             **file_content_request
         )
-
         return HttpxBinaryResponseContent(response=response.response)
 
     async def aretrieve_file(
