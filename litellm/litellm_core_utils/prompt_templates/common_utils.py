@@ -261,26 +261,29 @@ def _insert_user_continue_message(
     if not messages:
         return messages
 
-    result_messages = messages.copy()  # Don't modify the input list
     continue_message = user_continue_message or DEFAULT_USER_CONTINUE_MESSAGE
 
+    # Pre-allocate result list for performance (faster than repeated insert operations)
+    n = len(messages)
+    result_messages: List[AllMessageValues] = []
+    idx = 0
+
     # Handle first message if it's an assistant message
-    if result_messages[0]["role"] == "assistant":
-        result_messages.insert(0, continue_message)
+    if messages[0]["role"] == "assistant":
+        result_messages.append(continue_message)
+    result_messages.append(messages[0])
 
-    # Handle consecutive assistant messages and final message
-    i = 1  # Start from second message since we handled first message
-    while i < len(result_messages):
-        curr_message = result_messages[i]
-        prev_message = result_messages[i - 1]
+    # Main loop: efficiently process message pairs to avoid repeated insert
+    for idx in range(1, n):
+        curr_message = messages[idx]
+        prev_message = messages[idx - 1]
+        inserted = False
 
-        # Only check for consecutive assistant messages
-        # Ignore all other role types
         if curr_message["role"] == "assistant" and prev_message["role"] == "assistant":
-            result_messages.insert(i, continue_message)
-            i += 2  # Skip over the message we just inserted
-        else:
-            i += 1
+            result_messages.append(continue_message)
+            inserted = True
+
+        result_messages.append(curr_message)
 
     # Handle final message
     if result_messages[-1]["role"] == "assistant" and ensure_alternating_roles:
