@@ -74,7 +74,7 @@ class ReplicateConfig(BaseConfig):
         seed: Optional[int] = None,
         debug: Optional[bool] = None,
     ) -> None:
-        locals_ = locals().copy()
+        locals_ = locals()
         for key, value in locals_.items():
             if key != "self" and value is not None:
                 setattr(self.__class__, key, value)
