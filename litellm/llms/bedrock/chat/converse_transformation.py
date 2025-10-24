@@ -86,10 +86,17 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Assign only instance variables, avoid repeated per-class assignment
+        if maxTokens is not None:
+            self.maxTokens = maxTokens
+        if stopSequences is not None:
+            self.stopSequences = stopSequences
+        if temperature is not None:
+            self.temperature = temperature
+        if topP is not None:
+            self.topP = topP
+        if topK is not None:
+            self.topK = topK
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -879,9 +886,11 @@ class AmazonConverseConfig(BaseConfig):
                 )
 
         # Prepare and separate parameters
-        inference_params, additional_request_params, request_metadata = (
-            self._prepare_request_params(optional_params, model)
-        )
+        (
+            inference_params,
+            additional_request_params,
+            request_metadata,
+        ) = self._prepare_request_params(optional_params, model)
 
         original_tools = inference_params.pop("tools", [])
 
@@ -1051,11 +1060,13 @@ class AmazonConverseConfig(BaseConfig):
 
         Ensures deepseek reasoning content compatible output.
         """
-        reasoning_content_str = ""
-        for block in reasoning_content_blocks:
-            if "reasoningText" in block:
-                reasoning_content_str += block["reasoningText"]["text"]
-        return reasoning_content_str
+        # Use list comprehension and join for increased efficiency
+        reasoning_chunks = [
+            block["reasoningText"]["text"]
+            for block in reasoning_content_blocks
+            if "reasoningText" in block
+        ]
+        return "".join(reasoning_chunks)
 
     def _transform_thinking_blocks(
         self, thinking_blocks: List[BedrockConverseReasoningContentBlock]
@@ -1167,7 +1178,9 @@ class AmazonConverseConfig(BaseConfig):
 
         return message, returned_finish_reason
 
-    def _translate_message_content(self, content_blocks: List[ContentBlock]) -> Tuple[
+    def _translate_message_content(
+        self, content_blocks: List[ContentBlock]
+    ) -> Tuple[
         str,
         List[ChatCompletionToolCallChunk],
         Optional[List[BedrockConverseReasoningContentBlock]],
@@ -1182,9 +1195,9 @@ class AmazonConverseConfig(BaseConfig):
         """
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
         for idx, content in enumerate(content_blocks):
             """
             - Content is either a tool response or text
@@ -1305,9 +1318,9 @@ class AmazonConverseConfig(BaseConfig):
         chat_completion_message: ChatCompletionResponseMessage = {"role": "assistant"}
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
 
         if message is not None:
             (
@@ -1320,12 +1333,12 @@ class AmazonConverseConfig(BaseConfig):
             chat_completion_message["provider_specific_fields"] = {
                 "reasoningContentBlocks": reasoningContentBlocks,
             }
-            chat_completion_message["reasoning_content"] = (
-                self._transform_reasoning_content(reasoningContentBlocks)
-            )
-            chat_completion_message["thinking_blocks"] = (
-                self._transform_thinking_blocks(reasoningContentBlocks)
-            )
+            chat_completion_message[
+                "reasoning_content"
+            ] = self._transform_reasoning_content(reasoningContentBlocks)
+            chat_completion_message[
+                "thinking_blocks"
+            ] = self._transform_thinking_blocks(reasoningContentBlocks)
         chat_completion_message["content"] = content_str
         if (
             json_mode is True
