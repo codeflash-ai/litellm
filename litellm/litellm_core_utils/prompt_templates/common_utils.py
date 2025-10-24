@@ -151,10 +151,11 @@ def get_str_from_messages(messages: List[AllMessageValues]) -> str:
 
 
 def is_non_content_values_set(message: AllMessageValues) -> bool:
-    ignore_keys = ["content", "role", "name"]
-    return any(
-        message.get(key, None) is not None for key in message if key not in ignore_keys
-    )
+    ignore_keys = {"content", "role", "name"}
+    for key, value in message.items():
+        if key not in ignore_keys and value is not None:
+            return True
+    return False
 
 
 def _audio_or_image_in_message_content(message: AllMessageValues) -> bool:
