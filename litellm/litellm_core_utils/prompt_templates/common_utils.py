@@ -261,26 +261,28 @@ def _insert_user_continue_message(
     if not messages:
         return messages
 
-    result_messages = messages.copy()  # Don't modify the input list
+    result_messages = []  # Build new list instead of copying and inserting
     continue_message = user_continue_message or DEFAULT_USER_CONTINUE_MESSAGE
 
     # Handle first message if it's an assistant message
-    if result_messages[0]["role"] == "assistant":
-        result_messages.insert(0, continue_message)
+    if messages[0]["role"] == "assistant":
+        result_messages.append(continue_message)
 
     # Handle consecutive assistant messages and final message
-    i = 1  # Start from second message since we handled first message
-    while i < len(result_messages):
-        curr_message = result_messages[i]
-        prev_message = result_messages[i - 1]
+    prev_role = messages[0]["role"]
+    result_messages.append(messages[0])
+
+    for i in range(1, len(messages)):
+        curr_message = messages[i]
+        curr_role = curr_message["role"]
 
         # Only check for consecutive assistant messages
         # Ignore all other role types
-        if curr_message["role"] == "assistant" and prev_message["role"] == "assistant":
-            result_messages.insert(i, continue_message)
-            i += 2  # Skip over the message we just inserted
-        else:
-            i += 1
+        if curr_role == "assistant" and prev_role == "assistant":
+            result_messages.append(continue_message)
+
+        result_messages.append(curr_message)
+        prev_role = curr_role
 
     # Handle final message
     if result_messages[-1]["role"] == "assistant" and ensure_alternating_roles:
@@ -311,20 +313,23 @@ def _insert_assistant_continue_message(
     # Create a new list to store modified messages
     modified_messages: List[AllMessageValues] = []
 
-    for i, message in enumerate(messages):
-        modified_messages.append(message)
+    prev_role = messages[0].get("role")
+    modified_messages.append(messages[0])
+
+    for i in range(1, len(messages)):
+        message = messages[i]
+        curr_role = message.get("role")
 
         # Check if we need to insert an assistant message
-        if (
-            i < len(messages) - 1  # Not the last message
-            and message.get("role") == "user"  # Current is user
-            and messages[i + 1].get("role") == "user"
-        ):  # Next is user
+        if prev_role == "user" and curr_role == "user":
             # Insert assistant message
             continue_message = (
                 assistant_continue_message or DEFAULT_ASSISTANT_CONTINUE_MESSAGE
             )
             modified_messages.append(continue_message)
+
+        modified_messages.append(message)
+        prev_role = curr_role
 
     return modified_messages
 
