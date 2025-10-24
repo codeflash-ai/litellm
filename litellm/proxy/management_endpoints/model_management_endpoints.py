@@ -521,10 +521,8 @@ class ModelManagementAuthChecks:
                 status_code=403,
                 detail={"error": CommonProxyErrors.not_premium_user.value},
             )
-        if (
-            user_api_key_dict.user_role
-            and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
-        ):
+        user_role = user_api_key_dict.user_role
+        if user_role and user_role == LitellmUserRoles.PROXY_ADMIN:
             return True
         elif team_obj is None or not _is_user_team_admin(
             user_api_key_dict=user_api_key_dict, team_obj=team_obj
@@ -546,31 +544,42 @@ class ModelManagementAuthChecks:
         prisma_client: PrismaClient,
         premium_user: bool,
     ) -> Literal[True]:
-        if model_params.model_info is None or model_params.model_info.team_id is None:
+        model_info = model_params.model_info
+        if model_info is None or model_info.team_id is None:
             return True
-        if model_params.model_info.team_id is not None and premium_user is not True:
+        team_id = model_info.team_id
+        if team_id is not None and premium_user is not True:
             raise HTTPException(
                 status_code=403,
                 detail={"error": CommonProxyErrors.not_premium_user.value},
             )
 
+        # Try to unpack dict values directly to avoid model_dump() allocation cost
         _existing_team_row = await prisma_client.db.litellm_teamtable.find_unique(
-            where={"team_id": model_params.model_info.team_id}
+            where={"team_id": team_id}
         )
-
         if _existing_team_row is None:
             raise HTTPException(
                 status_code=400,
                 detail={
-                    "error": "Team id={} does not exist in db".format(
-                        model_params.model_info.team_id
-                    )
+                    "error": "Team id={} does not exist in db".format(team_id)
                 },
             )
-        existing_team_row = LiteLLM_TeamTable(**_existing_team_row.model_dump())
+
+        # If _existing_team_row is already LiteLLM_TeamTable, avoid copying
+        if isinstance(_existing_team_row, LiteLLM_TeamTable):
+            existing_team_row = _existing_team_row
+        else:
+            # Avoid unnecessary copying if .model_dump is just __dict__. Use __dict__ when possible.
+            model_dict = getattr(_existing_team_row, 'model_dump', None)
+            if callable(model_dict):
+                model_dict = _existing_team_row.model_dump()
+            else:
+                model_dict = dict(_existing_team_row.__dict__)
+            existing_team_row = LiteLLM_TeamTable(**model_dict)
 
         ModelManagementAuthChecks.can_user_make_team_model_call(
-            team_id=model_params.model_info.team_id,
+            team_id=team_id,
             user_api_key_dict=user_api_key_dict,
             team_obj=existing_team_row,
             premium_user=premium_user,
