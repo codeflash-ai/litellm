@@ -14,8 +14,15 @@ def function_has_argument(function: Callable, arg_name: str) -> bool:
     """Helper function to check if a function has a specific argument."""
     import inspect
 
-    signature = inspect.signature(function)
-    return arg_name in signature.parameters
+    # Accessing __code__.co_varnames directly is much faster for user-defined functions.
+    # Fallback to inspect.signature only if necessary (built-ins, C-extensions).
+    try:
+        co_varnames = function.__code__.co_varnames
+        return arg_name in co_varnames[: function.__code__.co_argcount]
+    except AttributeError:
+        # For built-in or extension functions where __code__ is not available
+        signature = inspect.signature(function)
+        return arg_name in signature.parameters
 
 
 def asyncify(
