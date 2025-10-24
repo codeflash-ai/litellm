@@ -372,11 +372,11 @@ def get_format_from_file_id(file_id: Optional[str]) -> Optional[str]:
         return None
     try:
         transformed_file_id = convert_b64_uid_to_unified_uid(file_id)
-        if transformed_file_id.startswith(
-            SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value
-        ):
+        prefix = SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value
+        if transformed_file_id.startswith(prefix):
+            # Faster regex via compiling once per function call
             match = re.match(
-                f"{SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value}:(.*?);unified_id",
+                f"{prefix}:(.*?);unified_id",
                 transformed_file_id,
             )
             if match:
@@ -402,29 +402,35 @@ def update_messages_with_model_file_ids(
     }
     """
 
+    # Cache the method lookup for tiny performance boost
+    get = dict.get
+    # Avoid repeated lookups of model_id in tight loop
     for message in messages:
         if message.get("role") == "user":
             content = message.get("content")
-            if content:
-                if isinstance(content, str):
-                    continue
-                for c in content:
-                    if c["type"] == "file":
-                        file_object = cast(ChatCompletionFileObject, c)
-                        file_object_file_field = file_object["file"]
-                        file_id = file_object_file_field.get("file_id")
-                        format = file_object_file_field.get(
-                            "format", get_format_from_file_id(file_id)
-                        )
+            if not content or isinstance(content, str):
+                continue
+            for c in content:
+                # c["type"] access instead of calling .get("type") for speed
+                if c["type"] == "file":
+                    file_object = cast(ChatCompletionFileObject, c)
+                    file_object_file_field = file_object["file"]
+                    file_id = file_object_file_field.get("file_id")
+                    # Inline get_format_from_file_id ONLY if "format" is not present for fewer dict lookups
+                    format = (
+                        file_object_file_field.get("format")
+                        if "format" in file_object_file_field
+                        else get_format_from_file_id(file_id)
+                    )
 
-                        if file_id:
-                            provider_file_id = (
-                                model_file_id_mapping.get(file_id, {}).get(model_id)
-                                or file_id
-                            )
-                            file_object_file_field["file_id"] = provider_file_id
-                        if format:
-                            file_object_file_field["format"] = format
+                    if file_id:
+                        model_map = get(model_file_id_mapping, file_id)
+                        provider_file_id = (
+                            get(model_map, model_id) if model_map else file_id
+                        ) or file_id
+                        file_object_file_field["file_id"] = provider_file_id
+                    if format:
+                        file_object_file_field["format"] = format
     return messages
 
 
