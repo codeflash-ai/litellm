@@ -84,24 +84,25 @@ class BaseConfig(ABC):
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not k.startswith("_abc")
-            and not k.startswith("_is_base_class")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                    property,
-                ),
-            )
-            and v is not None
-        }
+        skip_prefixes = ("__", "_abc", "_is_base_class")
+        function_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+            property,
+        )
+        
+        result = {}
+        for k, v in cls.__dict__.items():
+            if k.startswith(skip_prefixes):
+                continue
+            if isinstance(v, function_types):
+                continue
+            if v is None:
+                continue
+            result[k] = v
+        return result
 
     def get_json_schema_from_pydantic_object(
         self, response_format: Optional[Union[Type[BaseModel], dict]]
