@@ -138,10 +138,13 @@ class HumanLoopPromptManager(DualCache):
     def _get_model_from_prompt(
         self, prompt_management_client: PromptManagementClient, model: str
     ) -> str:
-        if prompt_management_client["model"] is not None:
-            return prompt_management_client["model"]
-        else:
-            return model.replace("{}/".format(self.integration_name), "")
+        cached_model = prompt_management_client["model"]
+        if cached_model is not None:
+            return cached_model
+        prefix = self.integration_name + "/"
+        if model.startswith(prefix):
+            return model[len(prefix) :]
+        return model
 
 
 prompt_manager = HumanLoopPromptManager()
@@ -158,11 +161,7 @@ class HumanloopLogger(CustomLogger):
         dynamic_callback_params: StandardCallbackDynamicParams,
         prompt_label: Optional[str] = None,
         prompt_version: Optional[int] = None,
-    ) -> Tuple[
-        str,
-        List[AllMessageValues],
-        dict,
-    ]:
+    ) -> Tuple[str, List[AllMessageValues], dict,]:
         humanloop_api_key = dynamic_callback_params.get(
             "humanloop_api_key"
         ) or get_secret_str("HUMANLOOP_API_KEY")
