@@ -5,7 +5,7 @@ Translating between OpenAI's `/chat/completion` format and Amazon's `/converse` 
 import copy
 import time
 import types
-from typing import List, Literal, Optional, Tuple, Union, cast, overload
+from typing import List, Literal, Optional, Tuple, Union, cast
 
 import httpx
 
@@ -56,6 +56,7 @@ from ..common_utils import (
     get_anthropic_beta_from_headers,
     get_bedrock_tool_name,
 )
+import json
 
 # Computer use tool prefixes supported by Bedrock
 BEDROCK_COMPUTER_USE_TOOLS = [
@@ -664,7 +665,6 @@ class AmazonConverseConfig(BaseConfig):
                     thinking_token_budget + DEFAULT_MAX_TOKENS
                 )
 
-    @overload
     def _get_cache_point_block(
         self,
         message_block: Union[
@@ -675,9 +675,13 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["system"],
     ) -> Optional[SystemContentBlock]:
-        pass
+        if message_block.get("cache_control", None) is None:
+            return None
+        if block_type == "system":
+            return SystemContentBlock(cachePoint=CachePointBlock(type="default"))
+        else:
+            return ContentBlock(cachePoint=CachePointBlock(type="default"))
 
-    @overload
     def _get_cache_point_block(
         self,
         message_block: Union[
@@ -688,7 +692,12 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["content_block"],
     ) -> Optional[ContentBlock]:
-        pass
+        if message_block.get("cache_control", None) is None:
+            return None
+        if block_type == "system":
+            return SystemContentBlock(cachePoint=CachePointBlock(type="default"))
+        else:
+            return ContentBlock(cachePoint=CachePointBlock(type="default"))
 
     def _get_cache_point_block(
         self,
@@ -710,34 +719,38 @@ class AmazonConverseConfig(BaseConfig):
     def _transform_system_message(
         self, messages: List[AllMessageValues]
     ) -> Tuple[List[AllMessageValues], List[SystemContentBlock]]:
+        # Minimize attribute and method lookups, batch pop for fewer list mutations
         system_prompt_indices = []
         system_content_blocks: List[SystemContentBlock] = []
+
+        append_system_block = system_content_blocks.append
+        get_cache_block = self._get_cache_point_block
+
         for idx, message in enumerate(messages):
-            if message["role"] == "system":
-                system_prompt_indices.append(idx)
-                if isinstance(message["content"], str) and message["content"]:
-                    system_content_blocks.append(
-                        SystemContentBlock(text=message["content"])
-                    )
-                    cache_block = self._get_cache_point_block(
-                        message, block_type="system"
-                    )
-                    if cache_block:
-                        system_content_blocks.append(cache_block)
-                elif isinstance(message["content"], list):
-                    for m in message["content"]:
-                        if m.get("type") == "text" and m.get("text"):
-                            system_content_blocks.append(
-                                SystemContentBlock(text=m["text"])
-                            )
-                            cache_block = self._get_cache_point_block(
-                                m, block_type="system"
-                            )
-                            if cache_block:
-                                system_content_blocks.append(cache_block)
-        if len(system_prompt_indices) > 0:
+            role = message["role"]
+            if role != "system":
+                continue
+            system_prompt_indices.append(idx)
+            content = message["content"]
+            if isinstance(content, str) and content:
+                append_system_block(SystemContentBlock(text=content))
+                cache_block = get_cache_block(message, block_type="system")
+                if cache_block is not None:
+                    append_system_block(cache_block)
+            elif isinstance(content, list):
+                for m in content:
+                    m_type = m.get("type")
+                    text = m.get("text")
+                    if m_type == "text" and text:
+                        append_system_block(SystemContentBlock(text=text))
+                        cache_block = get_cache_block(m, block_type="system")
+                        if cache_block is not None:
+                            append_system_block(cache_block)
+
+        if system_prompt_indices:
+            # Delete indexes in reverse order for efficiency
             for idx in reversed(system_prompt_indices):
-                messages.pop(idx)
+                del messages[idx]
         return messages, system_content_blocks
 
     def _transform_inference_params(self, inference_params: dict) -> InferenceConfig:
@@ -879,9 +892,11 @@ class AmazonConverseConfig(BaseConfig):
                 )
 
         # Prepare and separate parameters
-        inference_params, additional_request_params, request_metadata = (
-            self._prepare_request_params(optional_params, model)
-        )
+        (
+            inference_params,
+            additional_request_params,
+            request_metadata,
+        ) = self._prepare_request_params(optional_params, model)
 
         original_tools = inference_params.pop("tools", [])
 
@@ -1167,7 +1182,9 @@ class AmazonConverseConfig(BaseConfig):
 
         return message, returned_finish_reason
 
-    def _translate_message_content(self, content_blocks: List[ContentBlock]) -> Tuple[
+    def _translate_message_content(
+        self, content_blocks: List[ContentBlock]
+    ) -> Tuple[
         str,
         List[ChatCompletionToolCallChunk],
         Optional[List[BedrockConverseReasoningContentBlock]],
@@ -1182,9 +1199,9 @@ class AmazonConverseConfig(BaseConfig):
         """
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
         for idx, content in enumerate(content_blocks):
             """
             - Content is either a tool response or text
@@ -1305,9 +1322,9 @@ class AmazonConverseConfig(BaseConfig):
         chat_completion_message: ChatCompletionResponseMessage = {"role": "assistant"}
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
 
         if message is not None:
             (
@@ -1320,12 +1337,12 @@ class AmazonConverseConfig(BaseConfig):
             chat_completion_message["provider_specific_fields"] = {
                 "reasoningContentBlocks": reasoningContentBlocks,
             }
-            chat_completion_message["reasoning_content"] = (
-                self._transform_reasoning_content(reasoningContentBlocks)
-            )
-            chat_completion_message["thinking_blocks"] = (
-                self._transform_thinking_blocks(reasoningContentBlocks)
-            )
+            chat_completion_message[
+                "reasoning_content"
+            ] = self._transform_reasoning_content(reasoningContentBlocks)
+            chat_completion_message[
+                "thinking_blocks"
+            ] = self._transform_thinking_blocks(reasoningContentBlocks)
         chat_completion_message["content"] = content_str
         if (
             json_mode is True
