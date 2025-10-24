@@ -89,7 +89,7 @@ class AmazonConverseConfig(BaseConfig):
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -275,14 +275,7 @@ class AmazonConverseConfig(BaseConfig):
         base_model = BedrockModelInfo.get_base_model(model)
 
         if (
-            base_model.startswith("anthropic")
-            or base_model.startswith("mistral")
-            or base_model.startswith("cohere")
-            or base_model.startswith("meta.llama3-1")
-            or base_model.startswith("meta.llama3-2")
-            or base_model.startswith("meta.llama3-3")
-            or base_model.startswith("meta.llama4")
-            or base_model.startswith("amazon.nova")
+            base_model.startswith(("anthropic", "mistral", "cohere", "meta.llama3-1", "meta.llama3-2", "meta.llama3-3", "meta.llama4", "amazon.nova"))
             or supports_function_calling(
                 model=model, custom_llm_provider=self.custom_llm_provider
             )
