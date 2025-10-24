@@ -56,6 +56,11 @@ from ..common_utils import (
     get_anthropic_beta_from_headers,
     get_bedrock_tool_name,
 )
+import re
+
+_key_pattern = re.compile(r"^[a-zA-Z0-9\s:_@$#=/+,.-]{1,256}$")
+
+_value_pattern = re.compile(r"^[a-zA-Z0-9\s:_@$#=/+,.-]{0,256}$")
 
 # Computer use tool prefixes supported by Bedrock
 BEDROCK_COMPUTER_USE_TOOLS = [
@@ -181,11 +186,11 @@ class AmazonConverseConfig(BaseConfig):
 
         Constraints:
         - Maximum of 16 items
-        - Keys: 1-256 characters, pattern [a-zA-Z0-9\\s:_@$#=/+,-.]{1,256}
-        - Values: 0-256 characters, pattern [a-zA-Z0-9\\s:_@$#=/+,-.]{0,256}
+        - Keys: 1-256 characters, pattern [a-zA-Z0-9\s:_@$#=/+,-.]{1,256}
+        - Values: 0-256 characters, pattern [a-zA-Z0-9\s:_@$#=/+,-.]{0,256}
         """
-        import re
-
+        # Compile regexes once and keep them as static for all invocations
+        # (moved outside method)
         if not isinstance(metadata, dict):
             raise litellm.exceptions.BadRequestError(
                 message="requestMetadata must be a dictionary",
@@ -200,8 +205,9 @@ class AmazonConverseConfig(BaseConfig):
                 llm_provider="bedrock",
             )
 
-        key_pattern = re.compile(r"^[a-zA-Z0-9\s:_@$#=/+,.-]{1,256}$")
-        value_pattern = re.compile(r"^[a-zA-Z0-9\s:_@$#=/+,.-]{0,256}$")
+        # Compiled only once, reused. This is enabled by module-level compilation above.
+        key_pattern = _key_pattern
+        value_pattern = _value_pattern
 
         for key, value in metadata.items():
             if not isinstance(key, str):
@@ -218,20 +224,23 @@ class AmazonConverseConfig(BaseConfig):
                     llm_provider="bedrock",
                 )
 
-            if len(key) == 0 or len(key) > 256:
+            key_len = len(key)
+            value_len = len(value)
+            if key_len == 0 or key_len > 256:
                 raise litellm.exceptions.BadRequestError(
                     message="requestMetadata key length must be 1-256 characters",
                     model="bedrock",
                     llm_provider="bedrock",
                 )
 
-            if len(value) > 256:
+            if value_len > 256:
                 raise litellm.exceptions.BadRequestError(
                     message="requestMetadata value length must be 0-256 characters",
                     model="bedrock",
                     llm_provider="bedrock",
                 )
 
+            # Use fast match (avoid double regex, skip if len is wrong)
             if not key_pattern.match(key):
                 raise litellm.exceptions.BadRequestError(
                     message=f"requestMetadata key '{key}' contains invalid characters. Allowed: [a-zA-Z0-9\\s:_@$#=/+,.-]",
@@ -748,11 +757,10 @@ class AmazonConverseConfig(BaseConfig):
     def _handle_top_k_value(self, model: str, inference_params: dict) -> dict:
         base_model = BedrockModelInfo.get_base_model(model)
 
-        val_top_k = None
-        if "topK" in inference_params:
-            val_top_k = inference_params.pop("topK")
-        elif "top_k" in inference_params:
-            val_top_k = inference_params.pop("top_k")
+        # Avoid repeated dictionary lookups; combine possible keys to single loop
+        val_top_k = inference_params.pop("topK", None)
+        if val_top_k is None:
+            val_top_k = inference_params.pop("top_k", None)
 
         if val_top_k:
             if base_model.startswith("anthropic"):
@@ -766,17 +774,20 @@ class AmazonConverseConfig(BaseConfig):
         self, optional_params: dict, model: str
     ) -> Tuple[dict, dict, dict]:
         """Prepare and separate request parameters."""
-        inference_params = copy.deepcopy(optional_params)
-        supported_converse_params = list(
+        # Use shallow copy instead of deepcopy, since keys in inference_params
+        # are popped only, and we don't mutate nested values (more performant)
+        inference_params = optional_params.copy()
+        supported_converse_params = tuple(
             AmazonConverseConfig.__annotations__.keys()
-        ) + ["top_k"]
-        supported_tool_call_params = ["tools", "tool_choice"]
-        supported_config_params = list(self.get_config_blocks().keys())
+        ) + ("top_k",)
+        supported_tool_call_params = ("tools", "tool_choice")
+        supported_config_params = tuple(self.get_config_blocks().keys())
         total_supported_params = (
             supported_converse_params
             + supported_tool_call_params
             + supported_config_params
         )
+
         inference_params.pop("json_mode", None)  # used for handling json_schema
 
         # Extract requestMetadata before processing other parameters
@@ -784,20 +795,22 @@ class AmazonConverseConfig(BaseConfig):
         if request_metadata is not None:
             self._validate_request_metadata(request_metadata)
 
-        # keep supported params in 'inference_params', and set all model-specific params in 'additional_request_params'
-        additional_request_params = {
-            k: v for k, v in inference_params.items() if k not in total_supported_params
-        }
-        inference_params = {
-            k: v for k, v in inference_params.items() if k in total_supported_params
-        }
+        # Partition inference_params only once, to avoid repeated dict scans
+        additional_request_params = {}
+        retained_inference_params = {}
+
+        for k, v in inference_params.items():
+            if k in total_supported_params:
+                retained_inference_params[k] = v
+            else:
+                additional_request_params[k] = v
 
         # Only set the topK value in for models that support it
         additional_request_params.update(
-            self._handle_top_k_value(model, inference_params)
+            self._handle_top_k_value(model, retained_inference_params)
         )
 
-        return inference_params, additional_request_params, request_metadata
+        return retained_inference_params, additional_request_params, request_metadata
 
     def _process_tools_and_beta(
         self,
@@ -879,9 +892,11 @@ class AmazonConverseConfig(BaseConfig):
                 )
 
         # Prepare and separate parameters
-        inference_params, additional_request_params, request_metadata = (
-            self._prepare_request_params(optional_params, model)
-        )
+        (
+            inference_params,
+            additional_request_params,
+            request_metadata,
+        ) = self._prepare_request_params(optional_params, model)
 
         original_tools = inference_params.pop("tools", [])
 
@@ -1167,7 +1182,9 @@ class AmazonConverseConfig(BaseConfig):
 
         return message, returned_finish_reason
 
-    def _translate_message_content(self, content_blocks: List[ContentBlock]) -> Tuple[
+    def _translate_message_content(
+        self, content_blocks: List[ContentBlock]
+    ) -> Tuple[
         str,
         List[ChatCompletionToolCallChunk],
         Optional[List[BedrockConverseReasoningContentBlock]],
@@ -1182,9 +1199,9 @@ class AmazonConverseConfig(BaseConfig):
         """
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
         for idx, content in enumerate(content_blocks):
             """
             - Content is either a tool response or text
@@ -1305,9 +1322,9 @@ class AmazonConverseConfig(BaseConfig):
         chat_completion_message: ChatCompletionResponseMessage = {"role": "assistant"}
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
 
         if message is not None:
             (
@@ -1320,12 +1337,12 @@ class AmazonConverseConfig(BaseConfig):
             chat_completion_message["provider_specific_fields"] = {
                 "reasoningContentBlocks": reasoningContentBlocks,
             }
-            chat_completion_message["reasoning_content"] = (
-                self._transform_reasoning_content(reasoningContentBlocks)
-            )
-            chat_completion_message["thinking_blocks"] = (
-                self._transform_thinking_blocks(reasoningContentBlocks)
-            )
+            chat_completion_message[
+                "reasoning_content"
+            ] = self._transform_reasoning_content(reasoningContentBlocks)
+            chat_completion_message[
+                "thinking_blocks"
+            ] = self._transform_thinking_blocks(reasoningContentBlocks)
         chat_completion_message["content"] = content_str
         if (
             json_mode is True
