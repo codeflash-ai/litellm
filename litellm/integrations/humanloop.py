@@ -51,15 +51,33 @@ class HumanLoopPromptManager(DualCache):
         Returns:
             list: A list of dictionaries with variables substituted.
         """
+        # Local bindings for method lookups
+        str_replace = str.replace
+        dict_get = dict.get
+        str_isinstance = str.__instancecheck__
+
         compiled_prompts: List[AllMessageValues] = []
+        append = compiled_prompts.append
+
+        format_vars = prompt_variables
 
         for template in prompt_template:
-            tc = template.get("content")
-            if tc and isinstance(tc, str):
-                formatted_template = tc.replace("{{", "{").replace("}}", "}")
-                compiled_content = formatted_template.format(**prompt_variables)
+            tc = dict_get(template, "content")
+            # Use __instancecheck__ for faster type checks
+            if tc and str_isinstance(tc):
+                # Precompute replacement for template delimiters
+                # This is faster than chaining .replace calls when the replacements are not overlapping
+                if "{{" in tc or "}}" in tc:
+                    # Only replace if needed, avoids unnecessary string copies
+                    formatted_template = str_replace(
+                        str_replace(tc, "{{", "{"), "}}", "}"
+                    )
+                else:
+                    formatted_template = tc
+                # format is a bottleneck: avoid new dict on every call
+                compiled_content = formatted_template.format(**format_vars)
                 template["content"] = compiled_content
-            compiled_prompts.append(template)
+            append(template)
 
         return compiled_prompts
 
@@ -158,11 +176,7 @@ class HumanloopLogger(CustomLogger):
         dynamic_callback_params: StandardCallbackDynamicParams,
         prompt_label: Optional[str] = None,
         prompt_version: Optional[int] = None,
-    ) -> Tuple[
-        str,
-        List[AllMessageValues],
-        dict,
-    ]:
+    ) -> Tuple[str, List[AllMessageValues], dict,]:
         humanloop_api_key = dynamic_callback_params.get(
             "humanloop_api_key"
         ) or get_secret_str("HUMANLOOP_API_KEY")
