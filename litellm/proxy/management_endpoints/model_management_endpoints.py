@@ -521,20 +521,24 @@ class ModelManagementAuthChecks:
                 status_code=403,
                 detail={"error": CommonProxyErrors.not_premium_user.value},
             )
-        if (
-            user_api_key_dict.user_role
-            and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
-        ):
+        # Fast path for proxy admins, using local ref for enum string comparison if possible
+        user_role = user_api_key_dict.user_role
+        if user_role and user_role == LitellmUserRoles.PROXY_ADMIN:
             return True
-        elif team_obj is None or not _is_user_team_admin(
+        # Only format error string once; local vars for repeated access
+        team_id_str = team_id
+        api_key_team_id = user_api_key_dict.team_id
+        error_message = (
+            "Team ID={} does not match the API key's team ID={}, OR you are not the admin for this team. Check `/user/info` to verify your team admin status."
+            .format(team_id_str, api_key_team_id)
+        )
+        if team_obj is None or not _is_user_team_admin(
             user_api_key_dict=user_api_key_dict, team_obj=team_obj
         ):
             raise HTTPException(
                 status_code=403,
                 detail={
-                    "error": "Team ID={} does not match the API key's team ID={}, OR you are not the admin for this team. Check `/user/info` to verify your team admin status.".format(
-                        team_id, user_api_key_dict.team_id
-                    )
+                    "error": error_message
                 },
             )
         return True

@@ -20,9 +20,10 @@ def _user_has_admin_view(user_api_key_dict: UserAPIKeyAuth) -> bool:
 def _is_user_team_admin(
     user_api_key_dict: UserAPIKeyAuth, team_obj: LiteLLM_TeamTable
 ) -> bool:
+    user_id = user_api_key_dict.user_id
     for member in team_obj.members_with_roles:
         if (
-            member.user_id is not None and member.user_id == user_api_key_dict.user_id
+            member.user_id is not None and member.user_id == user_id
         ) and member.role == "admin":
             return True
 
