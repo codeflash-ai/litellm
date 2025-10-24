@@ -12,18 +12,23 @@ def lru_cache_wrapper(
     """
 
     def decorator(f: Callable[..., T]) -> Callable[..., T]:
-        @lru_cache(maxsize=maxsize)
+        cached_f = lru_cache(maxsize=maxsize)
+
+        # Use tuple packing to minimize function call overhead
+        @cached_f
         def wrapper(*args, **kwargs):
             try:
                 return ("success", f(*args, **kwargs))
             except Exception as e:
                 return ("error", e)
 
+        # Use local vars for fast-path and direct tuple unpack for performance
         def wrapped(*args, **kwargs):
             result = wrapper(*args, **kwargs)
-            if result[0] == "error":
-                raise result[1]
-            return result[1]
+            status, value = result
+            if status == "error":
+                raise value
+            return value
 
         return wrapped
 
