@@ -57,6 +57,11 @@ from ..common_utils import (
     get_bedrock_tool_name,
 )
 
+_AMAZON_CONVERSE_CONFIG_BLOCKS = {
+    "guardrailConfig": GuardrailConfigBlock,
+    "performanceConfig": PerformanceConfigBlock,
+}
+
 # Computer use tool prefixes supported by Bedrock
 BEDROCK_COMPUTER_USE_TOOLS = [
     "computer_use_preview",
@@ -97,10 +102,8 @@ class AmazonConverseConfig(BaseConfig):
 
     @classmethod
     def get_config_blocks(cls) -> dict:
-        return {
-            "guardrailConfig": GuardrailConfigBlock,
-            "performanceConfig": PerformanceConfigBlock,
-        }
+        # Optimization: return class-level constant, avoiding per-call dict construction
+        return _AMAZON_CONVERSE_CONFIG_BLOCKS
 
     @staticmethod
     def _convert_consecutive_user_messages_to_guarded_text(
@@ -741,6 +744,7 @@ class AmazonConverseConfig(BaseConfig):
         return messages, system_content_blocks
 
     def _transform_inference_params(self, inference_params: dict) -> InferenceConfig:
+        # Should not mutate original!
         if "top_k" in inference_params:
             inference_params["topK"] = inference_params.pop("top_k")
         return InferenceConfig(**inference_params)
@@ -766,31 +770,39 @@ class AmazonConverseConfig(BaseConfig):
         self, optional_params: dict, model: str
     ) -> Tuple[dict, dict, dict]:
         """Prepare and separate request parameters."""
-        inference_params = copy.deepcopy(optional_params)
-        supported_converse_params = list(
-            AmazonConverseConfig.__annotations__.keys()
-        ) + ["top_k"]
+        # Optimization: Most optional_params dicts are shallow, use copy() not deepcopy()
+        inference_params = optional_params.copy()
+
+        # These listings are constant-cost
+        supported_converse_params = list(AmazonConverseConfig.__annotations__.keys())
         supported_tool_call_params = ["tools", "tool_choice"]
         supported_config_params = list(self.get_config_blocks().keys())
         total_supported_params = (
             supported_converse_params
+            + ["top_k"]
             + supported_tool_call_params
             + supported_config_params
         )
+
+        # Remove used pop only if present (avoid unnecessary dict ops)
         inference_params.pop("json_mode", None)  # used for handling json_schema
 
-        # Extract requestMetadata before processing other parameters
-        request_metadata = inference_params.pop("requestMetadata", None)
+        # Extract requestMetadata first, only validate if present
+        request_metadata = inference_params.get("requestMetadata")
         if request_metadata is not None:
             self._validate_request_metadata(request_metadata)
+            # Only pop now to avoid possible unnecessary mutation if validate throws exception
+            request_metadata = inference_params.pop("requestMetadata")
 
-        # keep supported params in 'inference_params', and set all model-specific params in 'additional_request_params'
-        additional_request_params = {
-            k: v for k, v in inference_params.items() if k not in total_supported_params
-        }
-        inference_params = {
-            k: v for k, v in inference_params.items() if k in total_supported_params
-        }
+        # Only do comprehension once over the items
+        additional_request_params = {}
+        filtered_inference_params = {}
+        for k, v in inference_params.items():
+            if k in total_supported_params:
+                filtered_inference_params[k] = v
+            else:
+                additional_request_params[k] = v
+        inference_params = filtered_inference_params
 
         # Only set the topK value in for models that support it
         additional_request_params.update(
@@ -813,7 +825,8 @@ class AmazonConverseConfig(BaseConfig):
         anthropic_beta_list = []
         if headers:
             user_betas = get_anthropic_beta_from_headers(headers)
-            anthropic_beta_list.extend(user_betas)
+            if user_betas:
+                anthropic_beta_list.extend(user_betas)
 
         # Only separate tools if computer use tools are actually present
         if original_tools and self.is_computer_use_tool_used(original_tools, model):
@@ -839,13 +852,8 @@ class AmazonConverseConfig(BaseConfig):
 
         # Set anthropic_beta in additional_request_params if we have any beta features
         if anthropic_beta_list:
-            # Remove duplicates while preserving order
-            unique_betas = []
-            seen = set()
-            for beta in anthropic_beta_list:
-                if beta not in seen:
-                    unique_betas.append(beta)
-                    seen.add(beta)
+            # Remove duplicates while preserving order (optimized using dict.fromkeys)
+            unique_betas = list(dict.fromkeys(anthropic_beta_list))
             additional_request_params["anthropic_beta"] = unique_betas
 
         return bedrock_tools, anthropic_beta_list
@@ -858,7 +866,6 @@ class AmazonConverseConfig(BaseConfig):
         messages: Optional[List[AllMessageValues]] = None,
         headers: Optional[dict] = None,
     ) -> CommonRequestObject:
-        ## VALIDATE REQUEST
         """
         Bedrock doesn't support tool calling without `tools=` param specified.
         """
@@ -879,9 +886,11 @@ class AmazonConverseConfig(BaseConfig):
                 )
 
         # Prepare and separate parameters
-        inference_params, additional_request_params, request_metadata = (
-            self._prepare_request_params(optional_params, model)
-        )
+        (
+            inference_params,
+            additional_request_params,
+            request_metadata,
+        ) = self._prepare_request_params(optional_params, model)
 
         original_tools = inference_params.pop("tools", [])
 
@@ -1167,7 +1176,9 @@ class AmazonConverseConfig(BaseConfig):
 
         return message, returned_finish_reason
 
-    def _translate_message_content(self, content_blocks: List[ContentBlock]) -> Tuple[
+    def _translate_message_content(
+        self, content_blocks: List[ContentBlock]
+    ) -> Tuple[
         str,
         List[ChatCompletionToolCallChunk],
         Optional[List[BedrockConverseReasoningContentBlock]],
@@ -1182,9 +1193,9 @@ class AmazonConverseConfig(BaseConfig):
         """
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
         for idx, content in enumerate(content_blocks):
             """
             - Content is either a tool response or text
@@ -1305,9 +1316,9 @@ class AmazonConverseConfig(BaseConfig):
         chat_completion_message: ChatCompletionResponseMessage = {"role": "assistant"}
         content_str = ""
         tools: List[ChatCompletionToolCallChunk] = []
-        reasoningContentBlocks: Optional[List[BedrockConverseReasoningContentBlock]] = (
-            None
-        )
+        reasoningContentBlocks: Optional[
+            List[BedrockConverseReasoningContentBlock]
+        ] = None
 
         if message is not None:
             (
@@ -1320,12 +1331,12 @@ class AmazonConverseConfig(BaseConfig):
             chat_completion_message["provider_specific_fields"] = {
                 "reasoningContentBlocks": reasoningContentBlocks,
             }
-            chat_completion_message["reasoning_content"] = (
-                self._transform_reasoning_content(reasoningContentBlocks)
-            )
-            chat_completion_message["thinking_blocks"] = (
-                self._transform_thinking_blocks(reasoningContentBlocks)
-            )
+            chat_completion_message[
+                "reasoning_content"
+            ] = self._transform_reasoning_content(reasoningContentBlocks)
+            chat_completion_message[
+                "thinking_blocks"
+            ] = self._transform_thinking_blocks(reasoningContentBlocks)
         chat_completion_message["content"] = content_str
         if (
             json_mode is True
