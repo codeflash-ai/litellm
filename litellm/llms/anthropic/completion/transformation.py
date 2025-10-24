@@ -55,9 +55,9 @@ class AnthropicTextConfig(BaseConfig):
     to pass metadata to anthropic, it's {"user_id": "any-relevant-information"}
     """
 
-    max_tokens_to_sample: Optional[int] = (
-        litellm.max_tokens
-    )  # anthropic requires a default
+    max_tokens_to_sample: Optional[
+        int
+    ] = litellm.max_tokens  # anthropic requires a default
     stop_sequences: Optional[list] = None
     temperature: Optional[int] = None
     top_p: Optional[int] = None
@@ -75,10 +75,11 @@ class AnthropicTextConfig(BaseConfig):
         top_k: Optional[int] = None,
         metadata: Optional[dict] = None,
     ) -> None:
+        # Assign attributes to the instance (not class) for proper encapsulation and memory use.
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     # makes headers for API call
     def validate_environment(
@@ -167,7 +168,7 @@ class AnthropicTextConfig(BaseConfig):
             if param == "stream" and value is True:
                 optional_params["stream"] = value
             if param == "stop" and (isinstance(value, str) or isinstance(value, list)):
-                _value = litellm.AnthropicConfig()._map_stop_sequences(value)
+                _value = _map_stop_sequences(value)
                 if _value is not None:
                     optional_params["stop_sequences"] = _value
             if param == "temperature":
@@ -308,3 +309,21 @@ class AnthropicTextCompletionResponseIterator(BaseModelResponseIterator):
 
         except json.JSONDecodeError:
             raise ValueError(f"Failed to decode JSON from chunk: {chunk}")
+
+
+def _map_stop_sequences(stop: Optional[Union[str, List[str]]]) -> Optional[List[str]]:
+    if stop is None:
+        return None
+
+    drop_params = getattr(litellm, "drop_params", False)
+    if isinstance(stop, str):
+        if stop.isspace() and drop_params:
+            return None
+        return [stop]
+    if isinstance(stop, list):
+        if drop_params:
+            new_v = [v for v in stop if not (isinstance(v, str) and v.isspace())]
+        else:
+            new_v = list(stop)
+        return new_v if new_v else None
+    return None
