@@ -40,17 +40,17 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
     Reference: https://huggingface.github.io/text-generation-inference/#/Text%20Generation%20Inference/compat_generate
     """
 
-    hf_task: Optional[hf_tasks] = (
-        None  # litellm-specific param, used to know the api spec to use when calling huggingface api
-    )
+    hf_task: Optional[
+        hf_tasks
+    ] = None  # litellm-specific param, used to know the api spec to use when calling huggingface api
     best_of: Optional[int] = None
     decoder_input_details: Optional[bool] = None
     details: Optional[bool] = True  # enables returning logprobs + best of
     max_new_tokens: Optional[int] = None
     repetition_penalty: Optional[float] = None
-    return_full_text: Optional[bool] = (
-        False  # by default don't return the input as part of the output
-    )
+    return_full_text: Optional[
+        bool
+    ] = False  # by default don't return the input as part of the output
     seed: Optional[int] = None
     temperature: Optional[float] = None
     top_k: Optional[int] = None
@@ -80,7 +80,7 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     @classmethod
     def get_config(cls):
@@ -108,35 +108,47 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> Dict:
-        for param, value in non_default_params.items():
-            # temperature, top_p, n, stream, stop, max_tokens, n, presence_penalty default to None
-            if param == "temperature":
-                if value == 0.0 or value == 0:
-                    # hugging face exception raised when temp==0
-                    # Failed: Error occurred: HuggingfaceException - Input validation error: `temperature` must be strictly positive
-                    value = 0.01
-                optional_params["temperature"] = value
-            if param == "top_p":
-                optional_params["top_p"] = value
-            if param == "n":
-                optional_params["best_of"] = value
-                optional_params["do_sample"] = (
-                    True  # Need to sample if you want best of for hf inference endpoints
-                )
-            if param == "stream":
-                optional_params["stream"] = value
-            if param == "stop":
-                optional_params["stop"] = value
-            if param == "max_tokens" or param == "max_completion_tokens":
-                # HF TGI raises the following exception when max_new_tokens==0
-                # Failed: Error occurred: HuggingfaceException - Input validation error: `max_new_tokens` must be strictly positive
-                if value == 0:
-                    value = 1
-                optional_params["max_new_tokens"] = value
-            if param == "echo":
-                # https://huggingface.co/docs/huggingface_hub/main/en/package_reference/inference_client#huggingface_hub.InferenceClient.text_generation.decoder_input_details
-                #  Return the decoder input token logprobs and ids. You must set details=True as well for it to be taken into account. Defaults to False
-                optional_params["decoder_input_details"] = True
+        temperature = non_default_params.get("temperature")
+        if temperature is not None:
+            if temperature == 0.0 or temperature == 0:
+                # hugging face exception raised when temp==0
+                # Failed: Error occurred: HuggingfaceException - Input validation error: `temperature` must be strictly positive
+                temperature = 0.01
+            optional_params["temperature"] = temperature
+
+        top_p = non_default_params.get("top_p")
+        if top_p is not None:
+            optional_params["top_p"] = top_p
+
+        n = non_default_params.get("n")
+        if n is not None:
+            optional_params["best_of"] = n
+            optional_params[
+                "do_sample"
+            ] = True  # Need to sample if you want best of for hf inference endpoints
+
+        stream = non_default_params.get("stream")
+        if stream is not None:
+            optional_params["stream"] = stream
+
+        stop = non_default_params.get("stop")
+        if stop is not None:
+            optional_params["stop"] = stop
+
+        max_tokens = non_default_params.get("max_tokens")
+        max_completion_tokens = non_default_params.get("max_completion_tokens")
+        if max_tokens is not None or max_completion_tokens is not None:
+            # HF TGI raises the following exception when max_new_tokens==0
+            # Failed: Error occurred: HuggingfaceException - Input validation error: `max_new_tokens` must be strictly positive
+            value = max_tokens if max_tokens is not None else max_completion_tokens
+            if value == 0:
+                value = 1
+            optional_params["max_new_tokens"] = value
+
+        if non_default_params.get("echo") is not None:
+            # https://huggingface.co/docs/huggingface_hub/main/en/package_reference/inference_client#huggingface_hub.InferenceClient.text_generation.decoder_input_details
+            #  Return the decoder input token logprobs and ids. You must set details=True as well for it to be taken into account. Defaults to False
+            optional_params["decoder_input_details"] = True
 
         return optional_params
 
@@ -363,9 +375,9 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
             "content-type": "application/json",
         }
         if api_key is not None:
-            default_headers["Authorization"] = (
-                f"Bearer {api_key}"  # Huggingface Inference Endpoint default is to accept bearer tokens
-            )
+            default_headers[
+                "Authorization"
+            ] = f"Bearer {api_key}"  # Huggingface Inference Endpoint default is to accept bearer tokens
 
         headers = {**headers, **default_headers}
         return headers
