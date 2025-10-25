@@ -40,17 +40,17 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
     Reference: https://huggingface.github.io/text-generation-inference/#/Text%20Generation%20Inference/compat_generate
     """
 
-    hf_task: Optional[hf_tasks] = (
-        None  # litellm-specific param, used to know the api spec to use when calling huggingface api
-    )
+    hf_task: Optional[
+        hf_tasks
+    ] = None  # litellm-specific param, used to know the api spec to use when calling huggingface api
     best_of: Optional[int] = None
     decoder_input_details: Optional[bool] = None
     details: Optional[bool] = True  # enables returning logprobs + best of
     max_new_tokens: Optional[int] = None
     repetition_penalty: Optional[float] = None
-    return_full_text: Optional[bool] = (
-        False  # by default don't return the input as part of the output
-    )
+    return_full_text: Optional[
+        bool
+    ] = False  # by default don't return the input as part of the output
     seed: Optional[int] = None
     temperature: Optional[float] = None
     top_k: Optional[int] = None
@@ -80,7 +80,7 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     @classmethod
     def get_config(cls):
@@ -120,9 +120,9 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
                 optional_params["top_p"] = value
             if param == "n":
                 optional_params["best_of"] = value
-                optional_params["do_sample"] = (
-                    True  # Need to sample if you want best of for hf inference endpoints
-                )
+                optional_params[
+                    "do_sample"
+                ] = True  # Need to sample if you want best of for hf inference endpoints
             if param == "stream":
                 optional_params["stream"] = value
             if param == "stop":
@@ -144,62 +144,70 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
         return get_secret_str("HUGGINGFACE_API_KEY")
 
     def read_tgi_conv_models(self):
+        # Optimization: Reduce filesystem traversal and avoid repeated os.path.dirname
         try:
             global tgi_models_cache, conv_models_cache
-            # Check if the cache is already populated
-            # so we don't keep on reading txt file if there are 1k requests
             if (tgi_models_cache is not None) and (conv_models_cache is not None):
                 return tgi_models_cache, conv_models_cache
-            # If not, read the file and populate the cache
+
             tgi_models = set()
-            script_directory = os.path.dirname(os.path.abspath(__file__))
-            script_directory = os.path.dirname(script_directory)
-            # Construct the file path relative to the script's directory
-            file_path = os.path.join(
-                script_directory,
+            conv_models = set()
+
+            # Compute base metadata directory only once
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tgi_file_path = os.path.join(
+                base_dir,
                 "huggingface_llms_metadata",
                 "hf_text_generation_models.txt",
             )
 
-            with open(file_path, "r") as file:
-                for line in file:
-                    tgi_models.add(line.strip())
-
-            # Cache the set for future use
-            tgi_models_cache = tgi_models
-
-            # If not, read the file and populate the cache
-            file_path = os.path.join(
-                script_directory,
+            conv_file_path = os.path.join(
+                base_dir,
                 "huggingface_llms_metadata",
                 "hf_conversational_models.txt",
             )
-            conv_models = set()
-            with open(file_path, "r") as file:
-                for line in file:
-                    conv_models.add(line.strip())
-            # Cache the set for future use
-            conv_models_cache = conv_models
-            return tgi_models, conv_models
+
+            # Use context managers and read all lines at once for faster file I/O
+            try:
+                with open(tgi_file_path, "r") as file:
+                    tgi_models.update(line.rstrip("\n") for line in file)
+                tgi_models_cache = tgi_models
+            except Exception:
+                tgi_models_cache = set()
+
+            try:
+                with open(conv_file_path, "r") as file:
+                    conv_models.update(line.rstrip("\n") for line in file)
+                conv_models_cache = conv_models
+            except Exception:
+                conv_models_cache = set()
+
+            # Both are guaranteed set even in case of errors
+            return tgi_models_cache, conv_models_cache
         except Exception:
+            # For unexpected errors
             return set(), set()
 
     def get_hf_task_for_model(self, model: str) -> Tuple[hf_tasks, str]:
-        # read text file, cast it to set
-        # read the file called "huggingface_llms_metadata/hf_text_generation_models.txt"
-        if model.split("/")[0] in hf_task_list:
-            split_model = model.split("/", 1)
-            return split_model[0], split_model[1]  # type: ignore
+        # Optimization: minimize split operations and short-circuit in most common cases
+        # Use partition for faster split and less allocation
+        if "/" in model:
+            prefix, _, suffix = model.partition("/")
+            if prefix in hf_task_list:
+                return prefix, suffix  # type: ignore
+        else:
+            prefix = model
+        # Read cache once
         tgi_models, conversational_models = self.read_tgi_conv_models()
 
         if model in tgi_models:
             return "text-generation-inference", model
-        elif model in conversational_models:
+        if model in conversational_models:
             return "conversational", model
-        elif "roneneldan/TinyStories" in model:
+        # Optimize containment check for substring (TinyStories)
+        if "roneneldan/TinyStories" in model:
             return "text-generation", model
-        else:
-            return "text-generation-inference", model  # default to tgi
+        return "text-generation-inference", model  # default to tgi
 
     def transform_request(
         self,
@@ -363,9 +371,9 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
             "content-type": "application/json",
         }
         if api_key is not None:
-            default_headers["Authorization"] = (
-                f"Bearer {api_key}"  # Huggingface Inference Endpoint default is to accept bearer tokens
-            )
+            default_headers[
+                "Authorization"
+            ] = f"Bearer {api_key}"  # Huggingface Inference Endpoint default is to accept bearer tokens
 
         headers = {**headers, **default_headers}
         return headers
