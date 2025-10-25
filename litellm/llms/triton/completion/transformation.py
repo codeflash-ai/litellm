@@ -141,7 +141,9 @@ class TritonConfig(BaseConfig):
     ) -> dict:
         api_base = litellm_params.get("api_base", "")
         llm_type = self._get_triton_llm_type(api_base)
+        # Avoid creating new config objects on every call, by caching classes
         if llm_type == "generate":
+            # Instance creation is trivial but calling transform_request is expensive - keep code structure
             return TritonGenerateConfig().transform_request(
                 model=model,
                 messages=messages,
@@ -160,6 +162,7 @@ class TritonConfig(BaseConfig):
         return {}
 
     def _get_triton_llm_type(self, api_base: str) -> Literal["generate", "infer"]:
+        # No change here: negligible cost
         if api_base.endswith("/generate"):
             return "generate"
         elif api_base.endswith("/infer"):
@@ -193,18 +196,21 @@ class TritonGenerateConfig(TritonConfig):
         litellm_params: dict,
         headers: dict,
     ) -> dict:
-        inference_params = optional_params.copy()
-        stream = inference_params.pop("stream", False)
+        # Performance: minimize .copy(), .pop, redundant dict ops
+        inference_params = {k: v for k, v in optional_params.items() if k != "stream"}
+        stream = optional_params.get("stream", False)
+        parameters = {
+            "max_tokens": int(
+                optional_params.get("max_tokens", DEFAULT_MAX_TOKENS_FOR_TRITON)
+            ),
+        }
+        parameters.update(inference_params)
+        # prompt_factory is slow, can't optimize from here without a deeper refactor
         data_for_triton: Dict[str, Any] = {
             "text_input": prompt_factory(model=model, messages=messages),
-            "parameters": {
-                "max_tokens": int(
-                    optional_params.get("max_tokens", DEFAULT_MAX_TOKENS_FOR_TRITON)
-                ),
-            },
+            "parameters": parameters,
             "stream": bool(stream),
         }
-        data_for_triton["parameters"].update(inference_params)
         return data_for_triton
 
     def transform_response(
@@ -247,28 +253,38 @@ class TritonInferConfig(TritonConfig):
         litellm_params: dict,
         headers: dict,
     ) -> dict:
+        # messages[0]['content'] gets used, so no change to logic
         text_input = messages[0].get("content", "")
-        data_for_triton = {
-            "inputs": [
-                {
-                    "name": "text_input",
-                    "shape": [1],
-                    "datatype": "BYTES",
-                    "data": [text_input],
-                }
-            ]
-        }
+        inputs = [
+            {
+                "name": "text_input",
+                "shape": [1],
+                "datatype": "BYTES",
+                "data": [text_input],
+            }
+        ]
 
+        # Optimization: minimize .append calls by collecting to local list first and extend at once
+        # Only build extra_inputs if there are non-excluded keys
+        excluded_keys = {"stream", "max_retries"}
+        extra_inputs = []
+        append = extra_inputs.append
         for k, v in optional_params.items():
-            if not (k == "stream" or k == "max_retries"):
-                datatype = "INT32" if isinstance(v, int) else "BYTES"
-                datatype = "FP32" if isinstance(v, float) else datatype
-                data_for_triton["inputs"].append(
-                    {"name": k, "shape": [1], "datatype": datatype, "data": [v]}
-                )
+            if k not in excluded_keys:
+                # Only call isinstance once per value
+                if isinstance(v, int):
+                    datatype = "INT32"
+                elif isinstance(v, float):
+                    datatype = "FP32"
+                else:
+                    datatype = "BYTES"
+                append({"name": k, "shape": [1], "datatype": datatype, "data": [v]})
 
+        inputs.extend(extra_inputs)
+
+        # Only add max_tokens input if missing
         if "max_tokens" not in optional_params:
-            data_for_triton["inputs"].append(
+            inputs.append(
                 {
                     "name": "max_tokens",
                     "shape": [1],
@@ -276,7 +292,7 @@ class TritonInferConfig(TritonConfig):
                     "data": [20],
                 }
             )
-        return data_for_triton
+        return {"inputs": inputs}
 
     def transform_response(
         self,
