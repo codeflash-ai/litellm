@@ -8,6 +8,8 @@ from litellm.llms.bedrock.chat.invoke_transformations.base_invoke_transformation
     AmazonInvokeConfig,
 )
 
+_stop_pattern = re.compile(r"^(\|+|User:)$")
+
 
 class AmazonTitanConfig(AmazonInvokeConfig, BaseConfig):
     """
@@ -72,11 +74,11 @@ class AmazonTitanConfig(AmazonInvokeConfig, BaseConfig):
         filtered_stop = None
         if "stop" in supported_params and litellm.drop_params:
             if provider == "bedrock" and "amazon" in model:
-                filtered_stop = []
+                # Optimize: Use list comprehension and precompiled regex for filtering
                 if isinstance(stop, list):
-                    for s in stop:
-                        if re.match(r"^(\|+|User:)$", s):
-                            filtered_stop.append(s)
+                    filtered_stop = [s for s in stop if _stop_pattern.match(s)]
+                else:
+                    filtered_stop = []
         if filtered_stop is not None:
             supported_params["stop"] = filtered_stop
 
