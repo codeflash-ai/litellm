@@ -33,31 +33,37 @@ class AmazonTitanConfig(AmazonInvokeConfig, BaseConfig):
         temperature: Optional[float] = None,
         topP: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
-
+        # Avoid unnecessary locals().copy(), just assign directly for speed
+        if maxTokenCount is not None:
+            setattr(self.__class__, "maxTokenCount", maxTokenCount)
+        if stopSequences is not None:
+            setattr(self.__class__, "stopSequences", stopSequences)
+        if temperature is not None:
+            setattr(self.__class__, "temperature", temperature)
+        if topP is not None:
+            setattr(self.__class__, "topP", topP)
         AmazonInvokeConfig.__init__(self)
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not k.startswith("_abc")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        # Avoid repeated lookups and function checks
+        skip_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
+        # Use dict comprehension but move filtering to simpler if structure
+        out = {}
+        for k, v in cls.__dict__.items():
+            if (
+                not k.startswith("__")
+                and not k.startswith("_abc")
+                and not isinstance(v, skip_types)
+                and v is not None
+            ):
+                out[k] = v
+        return out
 
     def _map_and_modify_arg(
         self,
