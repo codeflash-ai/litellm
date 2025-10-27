@@ -81,35 +81,60 @@ class MistralConfig(OpenAIGPTConfig):
         response_format: Optional[dict] = None,
         stop: Optional[Union[str, list]] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        if temperature is not None:
+            self.__class__.temperature = temperature
+        if top_p is not None:
+            self.__class__.top_p = top_p
+        if max_tokens is not None:
+            self.__class__.max_tokens = max_tokens
+        if tools is not None:
+            self.__class__.tools = tools
+        if tool_choice is not None:
+            self.__class__.tool_choice = tool_choice
+        if random_seed is not None:
+            self.__class__.random_seed = random_seed
+        if safe_prompt is not None:
+            self.__class__.safe_prompt = safe_prompt
+        if response_format is not None:
+            self.__class__.response_format = response_format
+        if stop is not None:
+            self.__class__.stop = stop
 
     @classmethod
     def get_config(cls):
         return super().get_config()
 
     def get_supported_openai_params(self, model: str) -> List[str]:
-        supported_params = [
-            "stream",
-            "temperature",
-            "top_p",
-            "max_tokens",
-            "max_completion_tokens",
-            "tools",
-            "tool_choice",
-            "seed",
-            "stop",
-            "response_format",
-            "parallel_tool_calls",
-        ]
-
-        # Add reasoning support for magistral models
         if "magistral" in model.lower():
-            supported_params.extend(["thinking", "reasoning_effort"])
-
-        return supported_params
+            return [
+                "stream",
+                "temperature",
+                "top_p",
+                "max_tokens",
+                "max_completion_tokens",
+                "tools",
+                "tool_choice",
+                "seed",
+                "stop",
+                "response_format",
+                "parallel_tool_calls",
+                "thinking",
+                "reasoning_effort",
+            ]
+        else:
+            return [
+                "stream",
+                "temperature",
+                "top_p",
+                "max_tokens",
+                "max_completion_tokens",
+                "tools",
+                "tool_choice",
+                "seed",
+                "stop",
+                "response_format",
+                "parallel_tool_calls",
+            ]
 
     def _map_tool_choice(self, tool_choice: str) -> str:
         if tool_choice == "auto" or tool_choice == "none":
@@ -239,7 +264,7 @@ class MistralConfig(OpenAIGPTConfig):
         - if `name` is passed, then drop it for mistral API: https://github.com/BerriAI/litellm/issues/6696
 
         Motivation: mistral api doesn't support content as a list.
-        The above statement is not valid now. Need to plan to remove all the #1,2,3 
+        The above statement is not valid now. Need to plan to remove all the #1,2,3
         Mistral API supports content as a list.
         """
         ## 1. If 'image_url' or 'file' in content, then transform with base class and mistral-specific handling
@@ -271,8 +296,8 @@ class MistralConfig(OpenAIGPTConfig):
         else:
             return super()._transform_messages(new_messages, model, False)
 
-    async def _transform_messages_async(self,
-        messages: List[AllMessageValues], model: str
+    async def _transform_messages_async(
+        self, messages: List[AllMessageValues], model: str
     ) -> List[AllMessageValues]:
         """
         Handle modification of messages for Mistral API in an async context.
@@ -283,11 +308,10 @@ class MistralConfig(OpenAIGPTConfig):
         messages = self._handle_message_with_file(messages)
         return messages
 
-    def _transform_messages_sync(self,
-        messages: List[AllMessageValues], model: str
+    def _transform_messages_sync(
+        self, messages: List[AllMessageValues], model: str
     ) -> List[AllMessageValues]:
-        """ Handle modification of messages for Mistral API in a sync context.
-        """
+        """Handle modification of messages for Mistral API in a sync context."""
         # Call parent sync method to handle basic transformations
         # and then apply Mistral-specific handling for files
         # This is the sync version of the async method above
@@ -296,23 +320,25 @@ class MistralConfig(OpenAIGPTConfig):
         return messages
 
     def _handle_message_with_file(
-        self,
-        messages: List[AllMessageValues]) -> List[AllMessageValues]:
+        self, messages: List[AllMessageValues]
+    ) -> List[AllMessageValues]:
         """
         Mistral API supports only 'file_id' in message content with type 'file'.
         """
         for m in messages:
             _content_block = m.get("content")
-            if _content_block and isinstance(_content_block, list):                
+            if _content_block and isinstance(_content_block, list):
                 if any(c.get("type") == "file" for c in _content_block):
                     # If file content is present, we get file_id from 'file' attribute of content block
                     # then replace 'file' with 'file_id' and assign the value of 'file_id' attribute to it.
-                    file_contents = [c for c in _content_block if c.get("type") == "file"]
+                    file_contents = [
+                        c for c in _content_block if c.get("type") == "file"
+                    ]
                     for file_content in file_contents:
                         file_id = file_content.get("file", {}).get("file_id")
                         if file_id:
                             # Replace 'file' with 'file_id'
-                            file_content["file_id"] = file_id # type: ignore
+                            file_content["file_id"] = file_id  # type: ignore
                             file_content.pop("file", None)
         return messages
 
@@ -338,9 +364,9 @@ class MistralConfig(OpenAIGPTConfig):
                     # Handle both string and list content, preserving original format
                     if isinstance(existing_content, str):
                         # String content - prepend reasoning prompt
-                        new_content: Union[str, list] = (
-                            f"{reasoning_prompt}\n\n{existing_content}"
-                        )
+                        new_content: Union[
+                            str, list
+                        ] = f"{reasoning_prompt}\n\n{existing_content}"
                     elif isinstance(existing_content, list):
                         # List content - prepend reasoning prompt as text block
                         new_content = [
