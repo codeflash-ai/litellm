@@ -17,20 +17,19 @@ def _get_salt_key():
 
 
 def encrypt_value_helper(value: str, new_encryption_key: Optional[str] = None):
-    signing_key = new_encryption_key or _get_salt_key()
-
-    try:
-        if isinstance(value, str):
-            encrypted_value = encrypt_value(value=value, signing_key=signing_key)  # type: ignore
-            encrypted_value = base64.b64encode(encrypted_value).decode("utf-8")
-
-            return encrypted_value
-
+    if not isinstance(value, str):
         verbose_proxy_logger.debug(
             f"Invalid value type passed to encrypt_value: {type(value)} for Value: {value}\n Value must be a string"
         )
         # if it's not a string - do not encrypt it and return the value
         return value
+
+    signing_key = new_encryption_key or _get_salt_key()
+
+    try:
+        encrypted_value = encrypt_value(value=value, signing_key=signing_key)  # type: ignore
+        encrypted_value = base64.b64encode(encrypted_value).decode("utf-8")
+        return encrypted_value
     except Exception as e:
         raise e
 
@@ -52,7 +51,6 @@ def decrypt_value_helper(
         # if it's not str - do not decrypt it, return the value
         return value
     except Exception as e:
-
         error_message = f"Error decrypting value for key: {key}, Did your master_key/salt key change recently? \nError: {str(e)}\nSet permanent salt key - https://docs.litellm.ai/docs/proxy/prod#5-set-litellm-salt-key"
         if exception_type == "debug":
             verbose_proxy_logger.debug(error_message)
