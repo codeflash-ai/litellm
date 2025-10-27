@@ -156,6 +156,18 @@ from .specialty_caches.dynamic_logging_cache import DynamicLoggingCache
 
 if TYPE_CHECKING:
     from litellm.llms.base_llm.passthrough.transformation import BasePassthroughConfig
+
+_SENSITIVE_KEYWORDS = (
+    "authorization",
+    "token",
+    "key",
+    "secret",
+)
+
+_SENSITIVE_KEYWORDS_RE = re.compile(
+    "|".join(re.escape(s) for s in _SENSITIVE_KEYWORDS), re.IGNORECASE
+)
+
 try:
     from litellm_enterprise.enterprise_callbacks.callback_controls import (
         EnterpriseCallbackControls,
@@ -3083,23 +3095,12 @@ def _get_masked_values(
         masked_length: Optional length for the masked portion (number of *). If set, will use exactly this many *
                      regardless of original string length. The total length will be unmasked_length + masked_length.
     """
-    sensitive_keywords = [
-        "authorization",
-        "token",
-        "key",
-        "secret",
-    ]
     return {
         k: (
-            # If ignore_sensitive_values is True, or if this key doesn't contain sensitive keywords, return original value
             v
             if ignore_sensitive_values
-            or not any(
-                sensitive_keyword in k.lower()
-                for sensitive_keyword in sensitive_keywords
-            )
+            or not _SENSITIVE_KEYWORDS_RE.search(k)
             else (
-                # Apply masking to sensitive keys
                 (
                     v[: unmasked_length // 2]
                     + "*" * number_of_asterisks
