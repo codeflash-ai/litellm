@@ -6,6 +6,8 @@ This requires websockets, and is currently only supported on LiteLLM Proxy.
 
 from typing import Any, Optional, cast
 
+from httpx import URL
+
 from litellm.constants import REALTIME_WEBSOCKET_MAX_MESSAGE_SIZE_BYTES
 from litellm.types.realtime import RealtimeQueryParams
 
@@ -19,16 +21,16 @@ class OpenAIRealtime(OpenAIChatCompletion):
         """
         Construct the backend websocket URL with all query parameters (including 'model').
         """
-        from httpx import URL
-
-        api_base = api_base.replace("https://", "wss://")
-        api_base = api_base.replace("http://", "ws://")
+        if api_base.startswith("https://"):
+            api_base = "wss://" + api_base[8:]
+        elif api_base.startswith("http://"):
+            api_base = "ws://" + api_base[7:]
         url = URL(api_base)
-        # Set the correct path
-        url = url.copy_with(path="/v1/realtime")
-        # Include all query parameters including 'model'
+        # Set the correct path and include all query parameters
         if query_params:
-            url = url.copy_with(params=query_params)
+            url = url.copy_with(path="/v1/realtime", params=query_params)
+        else:
+            url = url.copy_with(path="/v1/realtime")
         return str(url)
 
     async def async_realtime(
@@ -44,6 +46,7 @@ class OpenAIRealtime(OpenAIChatCompletion):
     ):
         import websockets
         from websockets.asyncio.client import ClientConnection
+
         if api_base is None:
             api_base = "https://api.openai.com/"
         if api_key is None:
