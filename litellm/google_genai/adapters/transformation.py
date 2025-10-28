@@ -341,12 +341,10 @@ class GoogleGenAIAdapter:
                         function_chunk["parameters"] = func_decl["parametersJsonSchema"]
 
                     openai_tool = {"type": "function", "function": function_chunk}
-                    openai_tools.append(openai_tool)
+                    # Inline normalization to avoid building large intermediates
+                    openai_tools.append(normalize_tool_schema(openai_tool))
 
-        # normalize the tool schemas
-        normalized_tools = [normalize_tool_schema(tool) for tool in openai_tools]
-
-        return cast(List[ChatCompletionToolParam], normalized_tools)
+        return cast(List[ChatCompletionToolParam], openai_tools)
 
     def _transform_google_genai_tool_config_to_openai(
         self,
@@ -467,7 +465,6 @@ class GoogleGenAIAdapter:
         Returns:
             Dict in Google GenAI generate_content response format
         """
-
 
         # Extract the main response content
         choice = response.choices[0] if response.choices else None
