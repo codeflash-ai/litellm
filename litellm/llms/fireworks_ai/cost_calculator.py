@@ -27,8 +27,12 @@ def get_base_model_for_pricing(model_name: str) -> str:
 
     model_name = model_name.lower()
 
+    # Compile regex patterns
+    moe_pattern = re.compile(r"(\d+)x(\d+)b")
+    standard_pattern = re.compile(r"(\d+)b")
+
     # Check for MoE models in the form <number>x<number>b
-    moe_match = re.search(r"(\d+)x(\d+)b", model_name)
+    moe_match = moe_pattern.search(model_name)
     if moe_match:
         total_billion = int(moe_match.group(1)) * int(moe_match.group(2))
         if total_billion <= FIREWORKS_AI_56_B_MOE:
@@ -37,10 +41,9 @@ def get_base_model_for_pricing(model_name: str) -> str:
             return "fireworks-ai-56b-to-176b"
 
     # Check for standard models in the form <number>b
-    re_params_match = re.search(r"(\d+)b", model_name)
+    re_params_match = standard_pattern.search(model_name)
     if re_params_match is not None:
-        params_match = str(re_params_match.group(1))
-        params_billion = float(params_match)
+        params_billion = float(re_params_match.group(1))
 
         # Determine the category based on the number of parameters
         if params_billion <= FIREWORKS_AI_4_B:
@@ -65,22 +68,14 @@ def cost_per_token(model: str, usage: Usage) -> Tuple[float, float]:
     Returns:
         Tuple[float, float] - prompt_cost_in_usd, completion_cost_in_usd
     """
-    ## check if model mapped, else use default pricing
     try:
         model_info = get_model_info(model=model, custom_llm_provider="fireworks_ai")
     except Exception:
         base_model = get_base_model_for_pricing(model_name=model)
-
-        ## GET MODEL INFO
         model_info = get_model_info(
             model=base_model, custom_llm_provider="fireworks_ai"
         )
 
-    ## CALCULATE INPUT COST
-
-    prompt_cost: float = usage["prompt_tokens"] * model_info["input_cost_per_token"]
-
-    ## CALCULATE OUTPUT COST
+    prompt_cost = usage["prompt_tokens"] * model_info["input_cost_per_token"]
     completion_cost = usage["completion_tokens"] * model_info["output_cost_per_token"]
-
     return prompt_cost, completion_cost

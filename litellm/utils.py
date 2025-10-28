@@ -204,6 +204,7 @@ from litellm.types.utils import (
     Usage,
     all_litellm_params,
 )
+from litellm._logging import verbose_logger
 
 try:
     # Python 3.9+
@@ -5082,21 +5083,10 @@ def get_model_info(model: str, custom_llm_provider: Optional[str] = None) -> Mod
             "supported_openai_params": ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"]
         }
     """
-    supported_openai_params = litellm.get_supported_openai_params(
-        model=model, custom_llm_provider=custom_llm_provider
-    )
-
-    _model_info = _get_model_info_helper(
-        model=model,
-        custom_llm_provider=custom_llm_provider,
-    )
-
-    verbose_logger.debug(f"model_info: {_model_info}")
-
     returned_model_info = ModelInfo(
-        **_model_info, supported_openai_params=supported_openai_params
+        **_get_model_info_helper(model=model, custom_llm_provider=custom_llm_provider),
+        supported_openai_params=litellm.get_supported_openai_params(model=model, custom_llm_provider=custom_llm_provider)
     )
-
     return returned_model_info
 
 
