@@ -50,14 +50,16 @@ class CohereRerankV2Config(CohereRerankConfig):
 
         No mapping required - returns all supported params
         """
-        return dict(OptionalRerankParams(
-            query=query,
-            documents=documents,
-            top_n=top_n,
-            rank_fields=rank_fields,
-            return_documents=return_documents,
-            max_tokens_per_doc=max_tokens_per_doc,
-        ))
+        return dict(
+            OptionalRerankParams(
+                query=query,
+                documents=documents,
+                top_n=top_n,
+                rank_fields=rank_fields,
+                return_documents=return_documents,
+                max_tokens_per_doc=max_tokens_per_doc,
+            )
+        )
 
     def transform_rerank_request(
         self,
@@ -69,13 +71,15 @@ class CohereRerankV2Config(CohereRerankConfig):
             raise ValueError("query is required for Cohere rerank")
         if "documents" not in optional_rerank_params:
             raise ValueError("documents is required for Cohere rerank")
+
+        get = optional_rerank_params.get
         rerank_request = RerankRequest(
             model=model,
             query=optional_rerank_params["query"],
             documents=optional_rerank_params["documents"],
-            top_n=optional_rerank_params.get("top_n", None),
-            rank_fields=optional_rerank_params.get("rank_fields", None),
-            return_documents=optional_rerank_params.get("return_documents", None),
-            max_tokens_per_doc=optional_rerank_params.get("max_tokens_per_doc", None),
+            top_n=get("top_n", None),
+            rank_fields=get("rank_fields", None),
+            return_documents=get("return_documents", None),
+            max_tokens_per_doc=get("max_tokens_per_doc", None),
         )
-        return rerank_request.model_dump(exclude_none=True)
+        return {k: v for k, v in rerank_request.__dict__.items() if v is not None}
