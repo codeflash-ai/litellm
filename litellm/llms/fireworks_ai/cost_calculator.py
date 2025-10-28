@@ -12,6 +12,11 @@ from litellm.constants import (
 )
 from litellm.types.utils import Usage
 from litellm.utils import get_model_info
+import re
+
+_MOE_PATTERN = re.compile(r"(\d+)x(\d+)b", re.IGNORECASE)
+
+_STANDARD_PATTERN = re.compile(r"(\d+)b", re.IGNORECASE)
 
 
 # Extract the number of billion parameters from the model name
@@ -23,12 +28,10 @@ def get_base_model_for_pricing(model_name: str) -> str:
     Returns:
     - str: model pricing category if mapped else received model name
     """
-    import re
-
-    model_name = model_name.lower()
+    # Avoid repeated .lower() in regex comparisons by using re.IGNORECASE above
 
     # Check for MoE models in the form <number>x<number>b
-    moe_match = re.search(r"(\d+)x(\d+)b", model_name)
+    moe_match = _MOE_PATTERN.search(model_name)
     if moe_match:
         total_billion = int(moe_match.group(1)) * int(moe_match.group(2))
         if total_billion <= FIREWORKS_AI_56_B_MOE:
@@ -37,9 +40,9 @@ def get_base_model_for_pricing(model_name: str) -> str:
             return "fireworks-ai-56b-to-176b"
 
     # Check for standard models in the form <number>b
-    re_params_match = re.search(r"(\d+)b", model_name)
+    re_params_match = _STANDARD_PATTERN.search(model_name)
     if re_params_match is not None:
-        params_match = str(re_params_match.group(1))
+        params_match = re_params_match.group(1)
         params_billion = float(params_match)
 
         # Determine the category based on the number of parameters
