@@ -20,7 +20,9 @@ def _get_available_models(ctx: click.Context) -> List[Dict[str, Any]]:
         models_list = client.models.list()
         # Ensure we return a list of dictionaries
         if isinstance(models_list, list):
-            # Filter to ensure all items are dictionaries
+            # Avoid building a new list if they're all already dicts
+            if all(isinstance(model, dict) for model in models_list):
+                return models_list
             return [model for model in models_list if isinstance(model, dict)]
         return []
     except Exception as e:
@@ -34,52 +36,59 @@ def _select_model(console: Console, available_models: List[Dict[str, Any]]) -> O
         console.print("[yellow]No models available or could not fetch models list.[/yellow]")
         model_name = Prompt.ask("Please enter a model name")
         return model_name if model_name.strip() else None
-    
+
     # Display available models in a table
-    table = Table(title="Available Models")
+    MAX_MODELS_TO_DISPLAY = 200
+    models_to_display: List[Dict[str, Any]] = available_models[:MAX_MODELS_TO_DISPLAY]
+
+    table = Table(title="Available Models", show_header=True)
     table.add_column("Index", style="cyan", no_wrap=True)
     table.add_column("Model ID", style="green")
     table.add_column("Owned By", style="yellow")
-    MAX_MODELS_TO_DISPLAY = 200
-    
-    models_to_display: List[Dict[str, Any]] = available_models[:MAX_MODELS_TO_DISPLAY]
+
+    add_row = table.add_row  # Reduce attribute lookup in tight loop
+    str_id = str
+    get_model_id = lambda model: str_id(model.get("id", ""))
+    get_owned_by = lambda model: str_id(model.get("owned_by", ""))
     for i, model in enumerate(models_to_display):  # Limit to first 200 models
-        table.add_row(
-            str(i + 1),
-            str(model.get("id", "")),
-            str(model.get("owned_by", ""))
-        )
-    
+        add_row(str_id(i + 1), get_model_id(model), get_owned_by(model))
+
     if len(available_models) > MAX_MODELS_TO_DISPLAY:
         console.print(f"\n[dim]... and {len(available_models) - MAX_MODELS_TO_DISPLAY} more models[/dim]")
-    
+
     console.print(table)
-    
+
+    # Gather model ids for fast index check (avoid multiple lookups)
+    model_ids = [model.get("id", None) for model in available_models]
+    n_models = len(available_models)
+    prompt_ask = Prompt.ask
+    console_print = console.print
     while True:
         try:
-            choice = Prompt.ask(
+            choice = prompt_ask(
                 "\nSelect a model by entering the index number (or type a model name directly)",
                 default="1"
             ).strip()
-            
+
             # Try to parse as index
             try:
                 index = int(choice) - 1
-                if 0 <= index < len(available_models):
-                    return available_models[index]["id"]
+                if 0 <= index < n_models:
+                    model_id = model_ids[index]
+                    return model_id
                 else:
-                    console.print(f"[red]Invalid index. Please enter a number between 1 and {len(available_models)}[/red]")
+                    console_print(f"[red]Invalid index. Please enter a number between 1 and {n_models}[/red]")
                     continue
             except ValueError:
                 # Not a number, treat as model name
                 if choice:
                     return choice
                 else:
-                    console.print("[red]Please enter a valid model name or index[/red]")
+                    console_print("[red]Please enter a valid model name or index[/red]")
                     continue
-                    
+
         except KeyboardInterrupt:
-            console.print("\n[yellow]Model selection cancelled.[/yellow]")
+            console_print("\n[yellow]Model selection cancelled.[/yellow]")
             return None
 
 
@@ -230,19 +239,22 @@ def _show_history(console: Console, messages: List[Dict[str, Any]]):
     if not messages:
         console.print("[yellow]No conversation history.[/yellow]")
         return
-    
+
     console.print(Panel.fit("[bold]Conversation History[/bold]", title="History"))
-    
+    print_f = console.print  # Localize for minor perf in loop
     for i, message in enumerate(messages, 1):
         role = message["role"]
         content = message["content"]
-        
         if role == "system":
-            console.print(f"[dim]{i}. [bold magenta]System:[/bold magenta] {content}[/dim]")
+            print_f(f"[dim]{i}. [bold magenta]System:[/bold magenta] {content}[/dim]")
         elif role == "user":
-            console.print(f"{i}. [bold cyan]You:[/bold cyan] {content}")
+            print_f(f"{i}. [bold cyan]You:[/bold cyan] {content}")
         elif role == "assistant":
-            console.print(f"{i}. [bold green]Assistant:[/bold green] {content[:100]}{'...' if len(content) > 100 else ''}")
+            short_content = content
+            # Avoid slicing unless content is long
+            if len(content) > 100:
+                short_content = f"{content[:100]}..."
+            print_f(f"{i}. [bold green]Assistant:[/bold green] {short_content}")
 
 
 def _save_conversation(console: Console, messages: List[Dict[str, Any]], command: str):
@@ -251,14 +263,17 @@ def _save_conversation(console: Console, messages: List[Dict[str, Any]], command
     if len(parts) < 2:
         console.print("[red]Usage: /save <filename>[/red]")
         return
-    
+
     filename = parts[1]
     if not filename.endswith('.json'):
         filename += '.json'
-    
+
     try:
+        # Minimize memory and file handle duration for atomic operation
+        # Also, avoid double file open/close
+        data = json.dumps(messages, indent=2)
         with open(filename, 'w') as f:
-            json.dump(messages, f, indent=2)
+            f.write(data)
         console.print(f"[green]Conversation saved to {filename}[/green]")
     except Exception as e:
         console.print(f"[red]Error saving conversation: {e}[/red]")
@@ -270,11 +285,11 @@ def _load_conversation(console: Console, command: str, system: Optional[str]) ->
     if len(parts) < 2:
         console.print("[red]Usage: /load <filename>[/red]")
         return []
-    
+
     filename = parts[1]
     if not filename.endswith('.json'):
         filename += '.json'
-    
+
     try:
         with open(filename, 'r') as f:
             messages = json.load(f)
@@ -284,7 +299,7 @@ def _load_conversation(console: Console, command: str, system: Optional[str]) ->
         console.print(f"[red]File not found: {filename}[/red]")
     except Exception as e:
         console.print(f"[red]Error loading conversation: {e}[/red]")
-    
+
     # Return empty list or just system message if load failed
     if system:
         return [{"role": "system", "content": system}]
@@ -299,37 +314,43 @@ def _handle_special_commands(
     ctx: click.Context
 ) -> tuple[bool, List[Dict[str, Any]], Optional[str]]:
     """Handle special chat commands. Returns (should_exit, updated_messages, updated_model)"""
-    if user_input.lower() in ['/quit', '/exit', '/q']:
-        console.print("[yellow]Chat session ended.[/yellow]")
-        return True, messages, None
-    elif user_input.lower() == '/help':
-        _show_help(console)
-        return False, messages, None
-    elif user_input.lower() == '/clear':
-        new_messages = []
-        if system:
-            new_messages.append({"role": "system", "content": system})
-        console.print("[green]Conversation history cleared.[/green]")
-        return False, new_messages, None
-    elif user_input.lower() == '/history':
-        _show_history(console, messages)
-        return False, messages, None
-    elif user_input.lower().startswith('/save'):
+    user_input_lower = user_input.lower()
+    # Use dict for constant time lookup for exact-match special commands
+    exact_matches = {
+        '/quit', '/exit', '/q', '/help', '/clear', '/history', '/model'
+    }
+    if user_input_lower in exact_matches:
+        if user_input_lower in {'/quit', '/exit', '/q'}:
+            console.print("[yellow]Chat session ended.[/yellow]")
+            return True, messages, None
+        elif user_input_lower == '/help':
+            _show_help(console)
+            return False, messages, None
+        elif user_input_lower == '/clear':
+            new_messages = []
+            if system:
+                new_messages.append({"role": "system", "content": system})
+            console.print("[green]Conversation history cleared.[/green]")
+            return False, new_messages, None
+        elif user_input_lower == '/history':
+            _show_history(console, messages)
+            return False, messages, None
+        elif user_input_lower == '/model':
+            available_models = _get_available_models(ctx)
+            new_model = _select_model(console, available_models)
+            if new_model:
+                console.print(f"[green]Switched to model: {new_model}[/green]")
+                return False, messages, new_model
+            return False, messages, None
+    elif user_input_lower.startswith('/save'):
         _save_conversation(console, messages, user_input)
         return False, messages, None
-    elif user_input.lower().startswith('/load'):
+    elif user_input_lower.startswith('/load'):
         new_messages = _load_conversation(console, user_input, system)
         return False, new_messages, None
-    elif user_input.lower() == '/model':
-        available_models = _get_available_models(ctx)
-        new_model = _select_model(console, available_models)
-        if new_model:
-            console.print(f"[green]Switched to model: {new_model}[/green]")
-            return False, messages, new_model
-        return False, messages, None
     elif not user_input:
         return False, messages, None
-    
+
     # Not a special command
     return False, messages, None
 
