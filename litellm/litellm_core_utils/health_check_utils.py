@@ -11,18 +11,17 @@ def _filter_model_params(model_params: dict) -> dict:
 def _create_health_check_response(response_headers: dict) -> dict:
     response = {}
 
-    if (
-        response_headers.get("x-ratelimit-remaining-requests", None) is not None
-    ):  # not provided for dall-e requests
-        response["x-ratelimit-remaining-requests"] = response_headers[
-            "x-ratelimit-remaining-requests"
-        ]
+    # Store repeated lookups in local variables to minimize dict key search
+    remaining_requests = response_headers.get("x-ratelimit-remaining-requests")
+    if remaining_requests is not None:
+        response["x-ratelimit-remaining-requests"] = remaining_requests
 
-    if response_headers.get("x-ratelimit-remaining-tokens", None) is not None:
-        response["x-ratelimit-remaining-tokens"] = response_headers[
-            "x-ratelimit-remaining-tokens"
-        ]
+    remaining_tokens = response_headers.get("x-ratelimit-remaining-tokens")
+    if remaining_tokens is not None:
+        response["x-ratelimit-remaining-tokens"] = remaining_tokens
 
-    if response_headers.get("x-ms-region", None) is not None:
-        response["x-ms-region"] = response_headers["x-ms-region"]
+    ms_region = response_headers.get("x-ms-region")
+    if ms_region is not None:
+        response["x-ms-region"] = ms_region
+
     return response
