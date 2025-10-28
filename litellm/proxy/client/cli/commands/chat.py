@@ -1,5 +1,4 @@
 import json
-import sys
 from typing import Any, Dict, List, Optional
 
 import click
@@ -350,7 +349,6 @@ def _stream_response(console: Console, client: ChatClient, model: str, messages:
                 if content:
                     assistant_content += content
                     console.print(content, end="")
-                    sys.stdout.flush()
         
         console.print()  # Add newline after streaming
         return assistant_content if assistant_content else None
