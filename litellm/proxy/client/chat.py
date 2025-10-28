@@ -145,7 +145,6 @@ class ChatClient:
             "stream": True
         }
 
-        # Add optional parameters if provided
         if temperature is not None:
             data["temperature"] = temperature
         if top_p is not None:
@@ -161,10 +160,8 @@ class ChatClient:
         if user is not None:
             data["user"] = user
 
-        # Make streaming request
-        session = requests.Session()
         try:
-            response = session.post(
+            response = requests.post(
                 url, 
                 headers=self._get_headers(), 
                 json=data, 
@@ -172,12 +169,11 @@ class ChatClient:
             )
             response.raise_for_status()
             
-            # Parse SSE stream
-            for line in response.iter_lines():
+            # Parse SSE stream efficiently
+            for line in response.iter_lines(decode_unicode=True):
                 if line:
-                    line = line.decode('utf-8')
                     if line.startswith('data: '):
-                        data_str = line[6:]  # Remove 'data: ' prefix
+                        data_str = line[6:]
                         if data_str.strip() == '[DONE]':
                             break
                         try:
@@ -187,6 +183,6 @@ class ChatClient:
                             continue
                             
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 401:
+            if e.response is not None and e.response.status_code == 401:
                 raise UnauthorizedError(e)
             raise
