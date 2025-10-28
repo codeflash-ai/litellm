@@ -80,18 +80,20 @@ def normalize_tool_schema(tool: Dict[str, Any]) -> Dict[str, Any]:
     """
     if not isinstance(tool, dict):
         return tool
-        
-    normalized_tool = tool.copy()
-    
-    # Normalize function parameters if present
-    if 'function' in tool and isinstance(tool['function'], dict):
-        normalized_tool['function'] = tool['function'].copy()
-        if 'parameters' in tool['function']:
-            normalized_tool['function']['parameters'] = normalize_json_schema_types(
-                tool['function']['parameters']
-            )
-    
-    return normalized_tool
+
+    fn = tool.get('function')
+    if (
+        fn is not None
+        and isinstance(fn, dict)
+        and 'parameters' in fn
+    ):
+        # Only copy levels that actually change
+        new_fn = fn.copy()
+        new_fn['parameters'] = normalize_json_schema_types(fn['parameters'])
+        normalized_tool = tool.copy()
+        normalized_tool['function'] = new_fn
+        return normalized_tool
+    return tool
 
 
 def validate_schema(schema: dict, response: str):
