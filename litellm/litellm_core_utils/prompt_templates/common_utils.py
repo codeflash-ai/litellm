@@ -36,6 +36,7 @@ from litellm.types.utils import (
     SpecialEnums,
     StreamingChoices,
 )
+from litellm.constants import DEFAULT_MAX_RECURSE_DEPTH
 
 if TYPE_CHECKING:  # newer pattern to avoid importing pydantic objects on __init__.py
     from litellm.types.llms.openai import ChatCompletionImageObject
@@ -50,6 +51,31 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
+
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",  # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
 
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
@@ -621,36 +647,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
@@ -717,23 +720,23 @@ def filter_value_from_dict(dictionary: dict, key: str, depth: int = 0) -> Any:
 
     Goes through the nested dict and removes the key if it exists
     """
-    from litellm.constants import DEFAULT_MAX_RECURSE_DEPTH
-
     if depth > DEFAULT_MAX_RECURSE_DEPTH:
         return dictionary
 
-    # Create a copy of keys to avoid modifying dict during iteration
-    keys = list(dictionary.keys())
-    for k in keys:
-        v = dictionary[k]
+    # Build a list of keys to delete to avoid mutating during iteration
+    to_delete = []
+
+    for k, v in dictionary.items():
         if k == key:
-            del dictionary[k]
+            to_delete.append(k)
         elif isinstance(v, dict):
             filter_value_from_dict(v, key, depth + 1)
         elif isinstance(v, list):
             for item in v:
                 if isinstance(item, dict):
                     filter_value_from_dict(item, key, depth + 1)
+    for k in to_delete:
+        del dictionary[k]
     return dictionary
 
 
