@@ -230,19 +230,30 @@ def _show_history(console: Console, messages: List[Dict[str, Any]]):
     if not messages:
         console.print("[yellow]No conversation history.[/yellow]")
         return
-    
+
     console.print(Panel.fit("[bold]Conversation History[/bold]", title="History"))
-    
+
+    # Precompute the message strings prior to printing to reduce attribute lookups and Rich processing
+    output_lines: List[str] = []
+    append = output_lines.append  # Local variable lookup for small speedup in tight loops
+
     for i, message in enumerate(messages, 1):
         role = message["role"]
         content = message["content"]
-        
+
         if role == "system":
-            console.print(f"[dim]{i}. [bold magenta]System:[/bold magenta] {content}[/dim]")
+            append(f"[dim]{i}. [bold magenta]System:[/bold magenta] {content}[/dim]")
         elif role == "user":
-            console.print(f"{i}. [bold cyan]You:[/bold cyan] {content}")
+            append(f"{i}. [bold cyan]You:[/bold cyan] {content}")
         elif role == "assistant":
-            console.print(f"{i}. [bold green]Assistant:[/bold green] {content[:100]}{'...' if len(content) > 100 else ''}")
+            display_content = content
+            if len(content) > 100:
+                display_content = content[:100] + "..."
+            append(f"{i}. [bold green]Assistant:[/bold green] {display_content}")
+
+    # Print all messages at once to minimize Rich render calls
+    if output_lines:
+        console.print("\n".join(output_lines))
 
 
 def _save_conversation(console: Console, messages: List[Dict[str, Any]], command: str):
