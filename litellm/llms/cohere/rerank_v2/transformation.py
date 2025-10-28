@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 from litellm.llms.cohere.rerank.transformation import CohereRerankConfig
-from litellm.types.rerank import OptionalRerankParams, RerankRequest
+from litellm.types.rerank import RerankRequest
 
 
 class CohereRerankV2Config(CohereRerankConfig):
@@ -50,14 +50,14 @@ class CohereRerankV2Config(CohereRerankConfig):
 
         No mapping required - returns all supported params
         """
-        return dict(OptionalRerankParams(
-            query=query,
-            documents=documents,
-            top_n=top_n,
-            rank_fields=rank_fields,
-            return_documents=return_documents,
-            max_tokens_per_doc=max_tokens_per_doc,
-        ))
+        return {
+            "query": query,
+            "documents": documents,
+            "top_n": top_n,
+            "rank_fields": rank_fields,
+            "return_documents": return_documents,
+            "max_tokens_per_doc": max_tokens_per_doc,
+        }
 
     def transform_rerank_request(
         self,
