@@ -353,13 +353,11 @@ class GoogleGenAIAdapter:
         tool_config: Dict[str, Any],
     ) -> Optional[ChatCompletionToolChoiceValues]:
         """Transform Google GenAI tool_config to OpenAI tool_choice"""
-        function_calling_config = tool_config.get("functionCallingConfig", {})
-        mode = function_calling_config.get("mode", "AUTO")
+        mode = tool_config.get("functionCallingConfig", {}).get("mode", "AUTO")
 
         mode_mapping = {"AUTO": "auto", "ANY": "required", "NONE": "none"}
 
-        tool_choice = mode_mapping.get(mode, "auto")
-        return cast(ChatCompletionToolChoiceValues, tool_choice)
+        return cast(ChatCompletionToolChoiceValues, mode_mapping.get(mode, "auto"))
 
     def _transform_contents_to_messages(
         self,
@@ -467,7 +465,6 @@ class GoogleGenAIAdapter:
         Returns:
             Dict in Google GenAI generate_content response format
         """
-
 
         # Extract the main response content
         choice = response.choices[0] if response.choices else None
