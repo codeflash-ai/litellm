@@ -24,9 +24,10 @@ class X42PromptManagement(CustomPromptManagement):
         - messages: List[AllMessageValues] - the messages to use (can be pulled from prompt management tool)
         - non_default_params: dict - update with any optional params (e.g. temperature, max_tokens, etc.) to use (can be pulled from prompt management tool)
         """
-        verbose_logger.debug(
-            f"in async get chat completion prompt. Prompt ID: {prompt_id}, Prompt Variables: {prompt_variables}, Dynamic Callback Params: {dynamic_callback_params}"
-        )
+        if verbose_logger.isEnabledFor(verbose_logger.level):
+            verbose_logger.debug(
+                f"in async get chat completion prompt. Prompt ID: {prompt_id}, Prompt Variables: {prompt_variables}, Dynamic Callback Params: {dynamic_callback_params}"
+            )
 
         return model, messages, non_default_params
 
