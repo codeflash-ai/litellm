@@ -4405,60 +4405,60 @@ class StandardLoggingPayloadSetup:
         """
         if litellm.disable_add_user_agent_to_request_tags is True:
             return None
-        user_agent_tags: Optional[List[str]] = None
-        headers = proxy_server_request.get("headers", {})
-        if headers is not None and isinstance(headers, dict):
-            if "user-agent" in headers:
-                user_agent = headers["user-agent"]
-                if user_agent is not None:
-                    if user_agent_tags is None:
-                        user_agent_tags = []
-                    user_agent_part: Optional[str] = None
-                    if "/" in user_agent:
-                        user_agent_part = user_agent.split("/")[0]
-                    if user_agent_part is not None:
-                        user_agent_tags.append("User-Agent: " + user_agent_part)
-                    if user_agent is not None:
-                        user_agent_tags.append("User-Agent: " + user_agent)
-        return user_agent_tags
+
+        headers = proxy_server_request.get("headers")
+        if not headers or not isinstance(headers, dict):
+            return None
+
+        user_agent = headers.get("user-agent")
+        if not user_agent:
+            return None
+
+        user_agent_tags: List[str] = []
+        # Avoid unnecessary assignment for user_agent_part
+        if "/" in user_agent:
+            user_agent_part = user_agent.split("/", 1)[0]
+            user_agent_tags.append("User-Agent: " + user_agent_part)
+        user_agent_tags.append("User-Agent: " + user_agent)
+        return user_agent_tags or None
 
     @staticmethod
     def _get_extra_header_tags(proxy_server_request: dict) -> Optional[List[str]]:
         """
         Extract additional header tags for spend tracking based on config.
         """
-        extra_headers: List[str] = litellm.extra_spend_tag_headers or []
+        # Avoids copy unless litellm.extra_spend_tag_headers is set
+        extra_headers = litellm.extra_spend_tag_headers
         if not extra_headers:
             return None
 
-        headers = proxy_server_request.get("headers", {})
-        if not isinstance(headers, dict):
+        headers = proxy_server_request.get("headers")
+        if not headers or not isinstance(headers, dict):
             return None
 
-        header_tags = []
-        for header_name in extra_headers:
-            header_value = headers.get(header_name)
-            if header_value:
-                header_tags.append(f"{header_name}: {header_value}")
-
+        # List comprehension is slightly faster than appending inside the loop and avoids function lookup in hot path
+        header_tags = [
+            f"{header_name}: {header_value}"
+            for header_name in extra_headers
+            if (header_value := headers.get(header_name))
+        ]
         return header_tags if header_tags else None
 
     @staticmethod
     def _get_request_tags(metadata: dict, proxy_server_request: dict) -> List[str]:
-        request_tags = (
-            metadata.get("tags", [])
-            if isinstance(metadata.get("tags", []), list)
-            else []
-        )
+        tags = metadata.get("tags", [])
+        request_tags = tags if isinstance(tags, list) else []
+
         user_agent_tags = StandardLoggingPayloadSetup._get_user_agent_tags(
             proxy_server_request
         )
         additional_header_tags = StandardLoggingPayloadSetup._get_extra_header_tags(
             proxy_server_request
         )
-        if user_agent_tags is not None:
+        # Avoid function call and extend if both might be None
+        if user_agent_tags:
             request_tags.extend(user_agent_tags)
-        if additional_header_tags is not None:
+        if additional_header_tags:
             request_tags.extend(additional_header_tags)
         return request_tags
 
