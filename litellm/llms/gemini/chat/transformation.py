@@ -63,7 +63,9 @@ class GoogleAIStudioGeminiConfig(VertexGeminiConfig):
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(
+                    self, key, value
+                )  # Set instance attributes, not class attributes
 
     @classmethod
     def get_config(cls):
