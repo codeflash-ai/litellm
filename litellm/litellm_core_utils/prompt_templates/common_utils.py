@@ -36,6 +36,7 @@ from litellm.types.utils import (
     SpecialEnums,
     StreamingChoices,
 )
+from functools import lru_cache
 
 if TYPE_CHECKING:  # newer pattern to avoid importing pydantic objects on __init__.py
     from litellm.types.llms.openai import ChatCompletionImageObject
@@ -50,6 +51,31 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
+
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",  # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
 
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
@@ -482,9 +508,7 @@ def extract_file_data(file_data: FileTypes) -> ExtractedFileData:
     # Use provided content type or guess based on filename
     if not content_type:
         content_type = (
-            mimetypes.guess_type(filename)[0]
-            if filename
-            else "application/octet-stream"
+            _cached_guess_type(filename) if filename else "application/octet-stream"
         )
 
     return ExtractedFileData(
@@ -621,36 +645,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
@@ -930,3 +931,8 @@ def extract_images_from_message(message: AllMessageValues) -> List[str]:
                 elif isinstance(image_url, dict) and "url" in image_url:
                     images.append(image_url["url"])
     return images
+
+
+@lru_cache(maxsize=128)
+def _cached_guess_type(filename):
+    return mimetypes.guess_type(filename)[0]
