@@ -48,59 +48,103 @@ def perform_redaction(model_call_details: dict, result):
     model_call_details["prompt"] = ""
     model_call_details["input"] = ""
 
-    # Redact streaming response
-    if (
-        model_call_details.get("stream", False) is True
-        and "complete_streaming_response" in model_call_details
-    ):
-        _streaming_response = model_call_details["complete_streaming_response"]
-        if hasattr(_streaming_response, "choices"):
-            for choice in _streaming_response.choices:
-                if isinstance(choice, litellm.Choices):
+    stream_flag = model_call_details.get("stream", False)
+    complete_streaming_response = model_call_details.get(
+        "complete_streaming_response", None
+    )
+    if stream_flag is True and complete_streaming_response is not None:
+        _streaming_response = complete_streaming_response
+        choices = getattr(_streaming_response, "choices", None)
+        if choices is not None:
+            # In-place redaction, avoid hasattr + isinstance chain where possible
+            for choice in choices:
+                # Fast type check by direct comparison where possible
+                # litellm.Choices and litellm.utils.StreamingChoices are likely classes
+                if type(choice) is litellm.Choices:
                     choice.message.content = "redacted-by-litellm"
-                elif isinstance(choice, litellm.utils.StreamingChoices):
+                elif type(choice) is litellm.utils.StreamingChoices:
                     choice.delta.content = "redacted-by-litellm"
-        elif hasattr(_streaming_response, "output"):
-            # Handle ResponsesAPIResponse format
-            for output_item in _streaming_response.output:
-                if hasattr(output_item, "content") and isinstance(
-                    output_item.content, list
-                ):
-                    for content_part in output_item.content:
-                        if hasattr(content_part, "text"):
-                            content_part.text = "redacted-by-litellm"
-
-    # Redact result
-    if result is not None:
-        # Check if result is a coroutine, async generator, or other async object - these cannot be deepcopied
-        if (asyncio.iscoroutine(result) or 
-            asyncio.iscoroutinefunction(result) or
-            hasattr(result, '__aiter__') or  # async generator
-            hasattr(result, '__anext__')):   # async iterator
-            # For async objects, return a simple redacted response without deepcopy
-            return {"text": "redacted-by-litellm"}
-        
-        _result = copy.deepcopy(result)
-        if isinstance(_result, litellm.ModelResponse):
-            if hasattr(_result, "choices") and _result.choices is not None:
-                for choice in _result.choices:
+                else:
+                    # Fallback to isinstance if subclassing is possible (preserves original logic)
                     if isinstance(choice, litellm.Choices):
                         choice.message.content = "redacted-by-litellm"
                     elif isinstance(choice, litellm.utils.StreamingChoices):
                         choice.delta.content = "redacted-by-litellm"
-        elif isinstance(_result, litellm.ResponsesAPIResponse):
-            if hasattr(_result, "output"):
-                for output_item in _result.output:
-                    if hasattr(output_item, "content") and isinstance(output_item.content, list):
-                        for content_part in output_item.content:
-                            if hasattr(content_part, "text"):
+        else:
+            output = getattr(_streaming_response, "output", None)
+            if output is not None:
+                for output_item in output:
+                    content = getattr(output_item, "content", None)
+                    if isinstance(content, list):
+                        for content_part in content:
+                            text_attr = getattr(content_part, "text", None)
+                            if text_attr is not None:
                                 content_part.text = "redacted-by-litellm"
-        elif isinstance(_result, litellm.EmbeddingResponse):
-            if hasattr(_result, "data") and _result.data is not None:
-                _result.data = []
+
+    # Redact result
+    if result is not None:
+        # Check if result is a coroutine, async generator, or other async object - these cannot be deepcopied
+        # Try to minimize attribute lookups and function calls
+        is_async = (
+            asyncio.iscoroutine(result)
+            or asyncio.iscoroutinefunction(result)
+            or hasattr(result, "__aiter__")
+            or hasattr(result, "__anext__")  # async generator  # async iterator
+        )
+        if is_async:
+            return {"text": "redacted-by-litellm"}
+
+        # For non-async results, avoid unnecessary deepcopy for simple types
+        # Check if result is one of known types; for unknown types fallback to deepcopy + dictionary response (original logic)
+        # However, preserve the original behavioral order and coverage
+
+        # Only deepcopy if we expect fields to redact
+        result_type = type(result)
+        if result_type in (
+            litellm.ModelResponse,
+            litellm.ResponsesAPIResponse,
+            litellm.EmbeddingResponse,
+        ) or isinstance(
+            result,
+            (
+                litellm.ModelResponse,
+                litellm.ResponsesAPIResponse,
+                litellm.EmbeddingResponse,
+            ),
+        ):
+            _result = copy.deepcopy(result)
+            if isinstance(_result, litellm.ModelResponse):
+                choices = getattr(_result, "choices", None)
+                if choices:
+                    for choice in choices:
+                        if type(choice) is litellm.Choices:
+                            choice.message.content = "redacted-by-litellm"
+                        elif type(choice) is litellm.utils.StreamingChoices:
+                            choice.delta.content = "redacted-by-litellm"
+                        else:
+                            if isinstance(choice, litellm.Choices):
+                                choice.message.content = "redacted-by-litellm"
+                            elif isinstance(choice, litellm.utils.StreamingChoices):
+                                choice.delta.content = "redacted-by-litellm"
+            elif isinstance(_result, litellm.ResponsesAPIResponse):
+                output = getattr(_result, "output", None)
+                if output:
+                    for output_item in output:
+                        content = getattr(output_item, "content", None)
+                        if isinstance(content, list):
+                            for content_part in content:
+                                text_attr = getattr(content_part, "text", None)
+                                if text_attr is not None:
+                                    content_part.text = "redacted-by-litellm"
+            elif isinstance(_result, litellm.EmbeddingResponse):
+                data = getattr(_result, "data", None)
+                if data is not None:
+                    _result.data = []
+            else:
+                return {"text": "redacted-by-litellm"}
+            return _result
         else:
             return {"text": "redacted-by-litellm"}
-        return _result
 
 
 def should_redact_message_logging(model_call_details: dict) -> bool:
@@ -165,9 +209,9 @@ def _get_turn_off_message_logging_from_dynamic_params(
 
     handles boolean and string values of `turn_off_message_logging`
     """
-    standard_callback_dynamic_params: Optional[StandardCallbackDynamicParams] = (
-        model_call_details.get("standard_callback_dynamic_params", None)
-    )
+    standard_callback_dynamic_params: Optional[
+        StandardCallbackDynamicParams
+    ] = model_call_details.get("standard_callback_dynamic_params", None)
     if standard_callback_dynamic_params:
         _turn_off_message_logging = standard_callback_dynamic_params.get(
             "turn_off_message_logging"
