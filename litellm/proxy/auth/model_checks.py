@@ -339,12 +339,23 @@ def get_all_fallbacks(
     if not fallbacks_config:
         return []
 
+    # Attempt a fast-path for exact model matches
+    for item in fallbacks_config:
+        if isinstance(item, dict):
+            keys = list(item.keys())
+            if keys and keys[0] == model:
+                # Shortcut: direct mapping found
+                fallback_model_group = item[model]
+                if fallback_model_group is not None:
+                    return fallback_model_group
+                else:
+                    return []
+
+    # Fallback to the general handler for generic, stripped, or string entries
     try:
-        # Use existing function to get fallback model group
         fallback_model_group, _ = get_fallback_model_group(
             fallbacks=fallbacks_config, model_group=model
         )
-
         if fallback_model_group is None:
             return []
 
