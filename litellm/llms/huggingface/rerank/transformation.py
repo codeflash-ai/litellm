@@ -96,19 +96,24 @@ class HuggingFaceRerankConfig(BaseRerankConfig):
         max_chunks_per_doc: Optional[int] = None,
         max_tokens_per_doc: Optional[int] = None,
     ) -> Dict:
+        if not non_default_params:
+            return OptionalRerankParams()  # type: ignore
+
         optional_rerank_params = {}
-        if non_default_params is not None:
-            for k, v in non_default_params.items():
-                if k == "documents" and v is not None:
-                    optional_rerank_params["texts"] = v
-                elif k == "return_documents" and v is not None and isinstance(v, bool):
-                    optional_rerank_params["return_text"] = v
-                elif k == "top_n" and v is not None:
-                    optional_rerank_params["top_n"] = v
-                elif k == "documents" and v is not None:
-                    optional_rerank_params["texts"] = v
-                elif k == "query" and v is not None:
-                    optional_rerank_params["query"] = v
+        documents_value = non_default_params.get("documents")
+        if documents_value is not None:
+            optional_rerank_params["texts"] = documents_value
+        return_documents_value = non_default_params.get("return_documents")
+        if return_documents_value is not None and isinstance(
+            return_documents_value, bool
+        ):
+            optional_rerank_params["return_text"] = return_documents_value
+        top_n_value = non_default_params.get("top_n")
+        if top_n_value is not None:
+            optional_rerank_params["top_n"] = top_n_value
+        query_value = non_default_params.get("query")
+        if query_value is not None:
+            optional_rerank_params["query"] = query_value
 
         return OptionalRerankParams(**optional_rerank_params)  # type: ignore
 
