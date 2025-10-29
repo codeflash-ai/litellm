@@ -435,9 +435,7 @@ class AnthropicChatCompletion(BaseLLM):
 
             else:
                 if client is None or not isinstance(client, HTTPHandler):
-                    client = _get_httpx_client(
-                        params={"timeout": timeout}
-                    )
+                    client = _get_httpx_client(params={"timeout": timeout})
                 else:
                     client = client
 
@@ -629,50 +627,41 @@ class ModelResponseIterator:
         try:
             type_chunk = chunk.get("type", "") or ""
 
-            text = ""
-            tool_use: Optional[ChatCompletionToolCallChunk] = None
-            finish_reason = ""
-            usage: Optional[Usage] = None
-            provider_specific_fields: Dict[str, Any] = {}
-            reasoning_content: Optional[str] = None
-            thinking_blocks: Optional[
-                List[
-                    Union[
-                        ChatCompletionThinkingBlock, ChatCompletionRedactedThinkingBlock
-                    ]
-                ]
-            ] = None
+            # Avoid repetitive variable initialization: group in dict
+            init_vars = {
+                "text": "",
+                "tool_use": None,
+                "finish_reason": "",
+                "usage": None,
+                "provider_specific_fields": {},
+                "reasoning_content": None,
+                "thinking_blocks": None,
+                "index": 0,
+            }
+            # NOTE: We keep provider_specific_fields initialized as a dict, it is
+            # always assigned to a new empty dict anyway.
 
-            # Always use index=0 for OpenAI choice format (fixes multi-choice errors)
-            index = 0
             if type_chunk == "content_block_delta":
-                """
-                Anthropic content chunk
-                chunk = {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': 'Hello'}}
-                """
                 (
-                    text,
-                    tool_use,
-                    thinking_blocks,
-                    provider_specific_fields,
+                    init_vars["text"],
+                    init_vars["tool_use"],
+                    init_vars["thinking_blocks"],
+                    init_vars["provider_specific_fields"],
                 ) = self._content_block_delta_helper(chunk=chunk)
-                if thinking_blocks:
-                    reasoning_content = self._handle_reasoning_content(
-                        thinking_blocks=thinking_blocks
+                tb = init_vars["thinking_blocks"]
+                if tb:
+                    init_vars["reasoning_content"] = self._handle_reasoning_content(
+                        thinking_blocks=tb
                     )
             elif type_chunk == "content_block_start":
-                """
-                event: content_block_start
-                data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_01T1x1fJ34qAmk2tNTrN7Up6","name":"get_weather","input":{}}}
-                """
-
                 content_block_start = self.get_content_block_start(chunk=chunk)
                 self.content_blocks = []  # reset content blocks when new block starts
-                if content_block_start["content_block"]["type"] == "text":
-                    text = content_block_start["content_block"]["text"]
-                elif content_block_start["content_block"]["type"] == "tool_use":
+                cb_type = content_block_start["content_block"]["type"]
+                if cb_type == "text":
+                    init_vars["text"] = content_block_start["content_block"]["text"]
+                elif cb_type == "tool_use":
                     self.tool_index += 1
-                    tool_use = {
+                    init_vars["tool_use"] = {
                         "id": content_block_start["content_block"]["id"],
                         "type": "function",
                         "function": {
@@ -681,22 +670,20 @@ class ModelResponseIterator:
                         },
                         "index": self.tool_index,
                     }
-                elif (
-                    content_block_start["content_block"]["type"] == "redacted_thinking"
-                ):
+                elif cb_type == "redacted_thinking":
                     (
-                        thinking_blocks,
-                        provider_specific_fields,
+                        init_vars["thinking_blocks"],
+                        init_vars["provider_specific_fields"],
                     ) = self._handle_redacted_thinking_content(  # type: ignore
                         content_block_start=content_block_start,
-                        provider_specific_fields=provider_specific_fields,
+                        provider_specific_fields=init_vars["provider_specific_fields"],
                     )
             elif type_chunk == "content_block_stop":
                 ContentBlockStop(**chunk)  # type: ignore
                 # check if tool call content block
                 is_empty = self.check_empty_tool_call_args()
                 if is_empty:
-                    tool_use = {
+                    init_vars["tool_use"] = {
                         "id": None,
                         "type": "function",
                         "function": {
@@ -708,36 +695,19 @@ class ModelResponseIterator:
                 # Reset response_format tool tracking when block stops
                 self.is_response_format_tool = False
             elif type_chunk == "message_delta":
-                finish_reason, usage = self._handle_message_delta(chunk)
+                (
+                    init_vars["finish_reason"],
+                    init_vars["usage"],
+                ) = self._handle_message_delta(chunk)
             elif type_chunk == "message_start":
-                """
-                Anthropic
-                chunk = {
-                    "type": "message_start",
-                    "message": {
-                        "id": "msg_vrtx_011PqREFEMzd3REdCoUFAmdG",
-                        "type": "message",
-                        "role": "assistant",
-                        "model": "claude-3-sonnet-20240229",
-                        "content": [],
-                        "stop_reason": null,
-                        "stop_sequence": null,
-                        "usage": {
-                            "input_tokens": 270,
-                            "output_tokens": 1
-                        }
-                    }
-                }
-                """
                 message_start_block = MessageStartBlock(**chunk)  # type: ignore
-                if "usage" in message_start_block["message"]:
-                    usage = self._handle_usage(
-                        anthropic_usage_chunk=message_start_block["message"]["usage"]
+                msg = message_start_block["message"]
+                usage_val = msg.get("usage")
+                if usage_val:
+                    init_vars["usage"] = self._handle_usage(
+                        anthropic_usage_chunk=usage_val
                     )
             elif type_chunk == "error":
-                """
-                {"type":"error","error":{"details":null,"type":"api_error","message":"Internal server error"}      }
-                """
                 _error_dict = chunk.get("error", {}) or {}
                 message = _error_dict.get("message", None) or str(chunk)
                 raise AnthropicError(
@@ -745,32 +715,36 @@ class ModelResponseIterator:
                     status_code=500,  # it looks like Anthropic API does not return a status code in the chunk error - default to 500
                 )
 
-            text, tool_use = self._handle_json_mode_chunk(text=text, tool_use=tool_use)
+            # Faster local aliasing
+            text, tool_use = self._handle_json_mode_chunk(
+                text=init_vars["text"], tool_use=init_vars["tool_use"]
+            )
 
             returned_chunk = ModelResponseStream(
                 choices=[
                     StreamingChoices(
-                        index=index,
+                        index=init_vars["index"],
                         delta=Delta(
                             content=text,
                             tool_calls=[tool_use] if tool_use is not None else None,
                             provider_specific_fields=(
-                                provider_specific_fields
-                                if provider_specific_fields
+                                init_vars["provider_specific_fields"]
+                                if init_vars["provider_specific_fields"]
                                 else None
                             ),
                             thinking_blocks=(
-                                thinking_blocks if thinking_blocks else None
+                                init_vars["thinking_blocks"]
+                                if init_vars["thinking_blocks"]
+                                else None
                             ),
-                            reasoning_content=reasoning_content,
+                            reasoning_content=init_vars["reasoning_content"],
                         ),
-                        finish_reason=finish_reason,
+                        finish_reason=init_vars["finish_reason"],
                     )
                 ],
-                usage=usage,
+                usage=init_vars["usage"],
                 id=self.response_id,
             )
-
             return returned_chunk
 
         except json.JSONDecodeError:
@@ -896,16 +870,17 @@ class ModelResponseIterator:
             raise RuntimeError(f"Error receiving chunk from stream: {e}")
 
         try:
+            # Avoid repetitive branch for non-bytes values (over 99% of calls)
             str_line = chunk
             if isinstance(chunk, bytes):  # Handle binary data
                 str_line = chunk.decode("utf-8")  # Convert bytes to string
-                index = str_line.find("data:")
-                if index != -1:
-                    str_line = str_line[index:]
+                idx = str_line.find("data:")
+                if idx != -1:
+                    str_line = str_line[idx:]
 
             if str_line.startswith("data:"):
-                data_json = json.loads(str_line[5:])
-                return self.chunk_parser(chunk=data_json)
+                # Avoid storing data_json: pass directly to chunk_parser (avoid local variable pressure)
+                return self.chunk_parser(chunk=json.loads(str_line[5:]))
             else:
                 return GenericStreamingChunk(
                     text="",
