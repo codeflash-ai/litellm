@@ -1,4 +1,3 @@
-import types
 from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel
@@ -48,27 +47,19 @@ class VertexAITextEmbeddingConfig(BaseModel):
         ] = None,
         title: Optional[str] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        if auto_truncate is not None:
+            self.__class__.auto_truncate = auto_truncate
+        if task_type is not None:
+            self.__class__.task_type = task_type
+        if title is not None:
+            self.__class__.title = title
 
     @classmethod
     def get_config(cls):
         return {
             k: v
             for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
+            if not k.startswith("__") and not callable(v) and v is not None
         }
 
     def get_supported_openai_params(self):
