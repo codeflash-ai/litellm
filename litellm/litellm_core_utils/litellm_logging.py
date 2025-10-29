@@ -156,6 +156,9 @@ from .specialty_caches.dynamic_logging_cache import DynamicLoggingCache
 
 if TYPE_CHECKING:
     from litellm.llms.base_llm.passthrough.transformation import BasePassthroughConfig
+
+_SHA256_PATTERN = re.compile(r"[a-fA-F0-9]{64}", re.ASCII)
+
 try:
     from litellm_enterprise.enterprise_callbacks.callback_controls import (
         EnterpriseCallbackControls,
@@ -3938,7 +3941,7 @@ def use_custom_pricing_for_model(litellm_params: Optional[dict]) -> bool:
 
 def is_valid_sha256_hash(value: str) -> bool:
     # Check if the value is a valid SHA-256 hash (64 hexadecimal characters)
-    return bool(re.fullmatch(r"[a-fA-F0-9]{64}", value))
+    return bool(_SHA256_PATTERN.fullmatch(value))
 
 
 class StandardLoggingPayloadSetup:
@@ -4748,7 +4751,7 @@ def get_standard_logging_metadata(
         - If the input metadata is None or not a dictionary, an empty StandardLoggingMetadata object is returned.
         - If 'user_api_key' is present in metadata and is a valid SHA256 hash, it's stored as 'user_api_key_hash'.
     """
-    # Initialize with default values
+    # Use dictionary unpacking for faster object construction
     clean_metadata = StandardLoggingMetadata(
         user_api_key_hash=None,
         user_api_key_alias=None,
@@ -4774,17 +4777,19 @@ def get_standard_logging_metadata(
         cold_storage_object_key=None,
         user_api_key_auth_metadata=None,
     )
+
     if isinstance(metadata, dict):
-        # Update the clean_metadata with values from input metadata that match StandardLoggingMetadata fields
-        for key in StandardLoggingMetadata.__annotations__.keys():
+        keys = StandardLoggingMetadata.__annotations__.keys()
+        # use direct update for attributes to increase efficiency
+        for key in keys:
             if key in metadata:
                 clean_metadata[key] = metadata[key]  # type: ignore
 
-        if metadata.get("user_api_key") is not None:
-            if is_valid_sha256_hash(str(metadata.get("user_api_key"))):
-                clean_metadata["user_api_key_hash"] = metadata.get(
-                    "user_api_key"
-                )  # this is the hash
+        user_api_key = metadata.get("user_api_key")
+        # Avoid extra dict lookups by storing value in a local variable
+        if user_api_key is not None and is_valid_sha256_hash(str(user_api_key)):
+            clean_metadata["user_api_key_hash"] = user_api_key  # this is the hash
+
     return clean_metadata
 
 
