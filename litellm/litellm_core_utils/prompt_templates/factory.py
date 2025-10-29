@@ -812,16 +812,33 @@ def construct_format_tool_for_claude_prompt(name, description, parameters):
 
 def construct_tool_use_system_prompt(
     tools,
-):  # from https://github.com/anthropics/anthropic-cookbook/blob/main/function_calling/function_calling.ipynb
-    tool_str_list = []
-    for tool in tools:
-        tool_function = get_attribute_or_key(tool, "function")
-        tool_str = construct_format_tool_for_claude_prompt(
-            get_attribute_or_key(tool_function, "name"),
-            get_attribute_or_key(tool_function, "description", ""),
-            get_attribute_or_key(tool_function, "parameters", {}),
-        )
-        tool_str_list.append(tool_str)
+):
+    # Preallocate list size for tools if input is sequence-like and has known length
+    tool_count = len(tools) if hasattr(tools, "__len__") else None
+    tool_str_list = [None] * tool_count if tool_count is not None else []
+    append_tool_str = tool_str_list.append if tool_count is None else None
+
+    # Hoist local function lookups
+    get_attr_or_key = get_attribute_or_key
+    fmt_tool_prompt = construct_format_tool_for_claude_prompt
+
+    if tool_count is not None:
+        for idx, tool in enumerate(tools):
+            tool_function = get_attr_or_key(tool, "function")
+            # Reuse lookup to minimize attribute/key lookups and function call overhead.
+            name = get_attr_or_key(tool_function, "name")
+            description = get_attr_or_key(tool_function, "description", "")
+            parameters = get_attr_or_key(tool_function, "parameters", {})
+            tool_str_list[idx] = fmt_tool_prompt(name, description, parameters)
+    else:
+        for tool in tools:
+            tool_function = get_attr_or_key(tool, "function")
+            name = get_attr_or_key(tool_function, "name")
+            description = get_attr_or_key(tool_function, "description", "")
+            parameters = get_attr_or_key(tool_function, "parameters", {})
+            append_tool_str(fmt_tool_prompt(name, description, parameters))
+
+    # Efficient string join (no list comprehension needed, tool_str_list already contains str)
     tool_use_system_prompt = (
         "In this environment you have access to a set of tools you can use to answer the user's question.\n"
         "\n"
@@ -837,7 +854,7 @@ def construct_tool_use_system_prompt(
         "</function_calls>\n"
         "\n"
         "Here are the tools available:\n"
-        "<tools>\n" + "\n".join([tool_str for tool_str in tool_str_list]) + "\n</tools>"
+        "<tools>\n" + "\n".join(tool_str_list) + "\n</tools>"
     )
     return tool_use_system_prompt
 
@@ -1205,10 +1222,10 @@ def convert_to_gemini_tool_call_invoke(
         if tool_calls is not None:
             for tool in tool_calls:
                 if "function" in tool:
-                    gemini_function_call: Optional[VertexFunctionCall] = (
-                        _gemini_tool_call_invoke_helper(
-                            function_call_params=tool["function"]
-                        )
+                    gemini_function_call: Optional[
+                        VertexFunctionCall
+                    ] = _gemini_tool_call_invoke_helper(
+                        function_call_params=tool["function"]
                     )
                     if gemini_function_call is not None:
                         _parts_list.append(
@@ -1727,9 +1744,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                             )
 
                             if "cache_control" in _content_element:
-                                _anthropic_content_element["cache_control"] = (
-                                    _content_element["cache_control"]
-                                )
+                                _anthropic_content_element[
+                                    "cache_control"
+                                ] = _content_element["cache_control"]
                             user_content.append(_anthropic_content_element)
                         elif m.get("type", "") == "text":
                             m = cast(ChatCompletionTextObject, m)
@@ -1767,9 +1784,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                     )
 
                     if "cache_control" in _content_element:
-                        _anthropic_content_text_element["cache_control"] = (
-                            _content_element["cache_control"]
-                        )
+                        _anthropic_content_text_element[
+                            "cache_control"
+                        ] = _content_element["cache_control"]
 
                     user_content.append(_anthropic_content_text_element)
 
