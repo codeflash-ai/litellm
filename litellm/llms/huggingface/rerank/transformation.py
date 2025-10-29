@@ -53,12 +53,17 @@ class HuggingFaceRerankConfig(BaseRerankConfig):
     def get_api_base(self, model: str, api_base: Optional[str]) -> str:
         if api_base is not None:
             return api_base
-        elif os.getenv("HF_API_BASE") is not None:
-            return os.getenv("HF_API_BASE", "")
-        elif os.getenv("HUGGINGFACE_API_BASE") is not None:
-            return os.getenv("HUGGINGFACE_API_BASE", "")
-        else:
-            return "https://api-inference.huggingface.co"
+
+        # Cache env lookups to avoid redundant os.getenv calls
+        hf_api_base = os.environ.get("HF_API_BASE")
+        if hf_api_base is not None:
+            return hf_api_base
+
+        huggingface_api_base = os.environ.get("HUGGINGFACE_API_BASE")
+        if huggingface_api_base is not None:
+            return huggingface_api_base
+
+        return "https://api-inference.huggingface.co"
 
     def get_complete_url(self, api_base: Optional[str], model: str) -> str:
         """
