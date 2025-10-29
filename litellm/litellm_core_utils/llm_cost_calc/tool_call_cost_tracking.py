@@ -625,19 +625,22 @@ class StandardBuiltInToolCostTracking:
 
     @staticmethod
     def _get_web_search_options(kwargs: Dict) -> Optional[WebSearchOptions]:
+        # Fast path if explicit options are provided
         if "web_search_options" in kwargs:
             return WebSearchOptions(**kwargs.get("web_search_options", {}))
 
-        tools = StandardBuiltInToolCostTracking._get_tools_from_kwargs(
-            kwargs=kwargs, tool_type="web_search_preview"
-        ) or StandardBuiltInToolCostTracking._get_tools_from_kwargs(
-            kwargs=kwargs, tool_type="web_search"
-        )
-        if tools:
-            # Look for web search tool in the tools array
+        # Consolidate tools list once, only if present
+        tools = kwargs.get("tools")
+        if tools and isinstance(tools, list):
             for tool in tools:
                 if isinstance(tool, dict):
-                    if StandardBuiltInToolCostTracking._is_web_search_tool_call(tool):
+                    # Accept either web_search_preview, web_search or presence of search_context_size
+                    tool_type = tool.get("type", None)
+                    if (
+                        tool_type == "web_search_preview"
+                        or tool_type == "web_search"
+                        or "search_context_size" in tool
+                    ):
                         return WebSearchOptions(**tool)
         return None
 
@@ -649,14 +652,11 @@ class StandardBuiltInToolCostTracking:
 
     @staticmethod
     def _get_file_search_tool_call(kwargs: Dict) -> Optional[FileSearchTool]:
-        tools = StandardBuiltInToolCostTracking._get_tools_from_kwargs(
-            kwargs, "file_search"
-        )
-        if tools:
+        tools = kwargs.get("tools")
+        if tools and isinstance(tools, list):
             for tool in tools:
-                if isinstance(tool, dict):
-                    if StandardBuiltInToolCostTracking._is_file_search_tool_call(tool):
-                        return FileSearchTool(**tool)
+                if isinstance(tool, dict) and tool.get("type", None) == "file_search":
+                    return FileSearchTool(**tool)
         return None
 
     @staticmethod
