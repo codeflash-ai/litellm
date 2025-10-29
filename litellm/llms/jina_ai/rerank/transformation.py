@@ -51,9 +51,11 @@ class JinaAIRerankConfig(BaseRerankConfig):
         for k, v in non_default_params.items():
             if k in supported_params:
                 optional_params[k] = v
-        return dict(OptionalRerankParams(
-            **optional_params,
-        ))
+        return dict(
+            OptionalRerankParams(
+                **optional_params,
+            )
+        )
 
     def get_complete_url(self, api_base: Optional[str], model: str) -> str:
         base_path = "/v1/rerank"
@@ -144,17 +146,11 @@ class JinaAIRerankConfig(BaseRerankConfig):
         """
         Jina AI reranker is priced at $0.000000018 per token.
         """
-        if (
-            model_info is None
-            or "input_cost_per_token" not in model_info
-            or model_info["input_cost_per_token"] is None
-            or billed_units is None
-        ):
-            return 0.0, 0.0
-
-        total_tokens = billed_units.get("total_tokens")
-        if total_tokens is None:
-            return 0.0, 0.0
-
-        input_cost = model_info["input_cost_per_token"] * total_tokens
-        return input_cost, 0.0
+        # Fast path: all necessary data is present and valid
+        if model_info is not None and billed_units is not None:
+            input_cost_per_token = model_info.get("input_cost_per_token", None)
+            total_tokens = billed_units.get("total_tokens", None)
+            if input_cost_per_token is not None and total_tokens is not None:
+                input_cost = input_cost_per_token * total_tokens
+                return input_cost, 0.0
+        return 0.0, 0.0
