@@ -3136,12 +3136,8 @@ async def send_email(
 
 
 def hash_token(token: str):
-    import hashlib
-
     # Hash the string using SHA-256
-    hashed_token = hashlib.sha256(token.encode()).hexdigest()
-
-    return hashed_token
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _hash_token_if_needed(token: str) -> str:
@@ -3150,6 +3146,7 @@ def _hash_token_if_needed(token: str) -> str:
 
     Else return the token as is
     """
+    # Using str slicing instead of startswith is not faster for this case
     if token.startswith("sk-"):
         return hash_token(token=token)
     else:
