@@ -23,21 +23,21 @@ class DatabricksEmbeddingConfig:
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        function_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
+        result = {}
+        for k, v in cls.__dict__.items():
+            if (
+                not k.startswith("__")
+                and not isinstance(v, function_types)
+                and v is not None
+            ):
+                result[k] = v
+        return result
 
     def get_supported_openai_params(
         self,
