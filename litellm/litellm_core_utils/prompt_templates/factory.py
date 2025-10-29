@@ -786,13 +786,12 @@ def anthropic_pt(
 
 
 def construct_format_parameters_prompt(parameters: dict):
-    parameter_str = "<parameter>\n"
+    parts = ["<parameter>\n"]
+    append = parts.append
     for k, v in parameters.items():
-        parameter_str += f"<{k}>"
-        parameter_str += f"{v}"
-        parameter_str += f"</{k}>"
-    parameter_str += "\n</parameter>"
-    return parameter_str
+        append(f"<{k}>{v}</{k}>")
+    parts.append("\n</parameter>")
+    return "".join(parts)
 
 
 def construct_format_tool_for_claude_prompt(name, description, parameters):
@@ -1205,10 +1204,10 @@ def convert_to_gemini_tool_call_invoke(
         if tool_calls is not None:
             for tool in tool_calls:
                 if "function" in tool:
-                    gemini_function_call: Optional[VertexFunctionCall] = (
-                        _gemini_tool_call_invoke_helper(
-                            function_call_params=tool["function"]
-                        )
+                    gemini_function_call: Optional[
+                        VertexFunctionCall
+                    ] = _gemini_tool_call_invoke_helper(
+                        function_call_params=tool["function"]
                     )
                     if gemini_function_call is not None:
                         _parts_list.append(
@@ -1727,9 +1726,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                             )
 
                             if "cache_control" in _content_element:
-                                _anthropic_content_element["cache_control"] = (
-                                    _content_element["cache_control"]
-                                )
+                                _anthropic_content_element[
+                                    "cache_control"
+                                ] = _content_element["cache_control"]
                             user_content.append(_anthropic_content_element)
                         elif m.get("type", "") == "text":
                             m = cast(ChatCompletionTextObject, m)
@@ -1767,9 +1766,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                     )
 
                     if "cache_control" in _content_element:
-                        _anthropic_content_text_element["cache_control"] = (
-                            _content_element["cache_control"]
-                        )
+                        _anthropic_content_text_element[
+                            "cache_control"
+                        ] = _content_element["cache_control"]
 
                     user_content.append(_anthropic_content_text_element)
 
