@@ -15,6 +15,15 @@ class ModelsManagementClient:
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
 
+        # Precompute headers for performance, because api_key never changes after construction.
+        # If api_key is None, empty dict will be precalculated.
+        if self._api_key:
+            self._headers_cache: Dict[str, str] = {
+                "Authorization": f"Bearer {self._api_key}"
+            }
+        else:
+            self._headers_cache: Dict[str, str] = {}
+
     def _get_headers(self) -> Dict[str, str]:
         """
         Get the headers for API requests, including authorization if api_key is set.
@@ -22,12 +31,12 @@ class ModelsManagementClient:
         Returns:
             Dict[str, str]: Headers to use for API requests
         """
-        headers = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
+        # Return precalculated headers for optimal performance.
+        return self._headers_cache
 
-    def list(self, return_request: bool = False) -> Union[List[Dict[str, Any]], requests.Request]:
+    def list(
+        self, return_request: bool = False
+    ) -> Union[List[Dict[str, Any]], requests.Request]:
         """
         Get the list of models supported by the server.
 
@@ -109,7 +118,9 @@ class ModelsManagementClient:
                 raise UnauthorizedError(e)
             raise
 
-    def delete(self, model_id: str, return_request: bool = False) -> Union[Dict[str, Any], requests.Request]:
+    def delete(
+        self, model_id: str, return_request: bool = False
+    ) -> Union[Dict[str, Any], requests.Request]:
         """
         Delete a model from the proxy.
 
@@ -130,14 +141,17 @@ class ModelsManagementClient:
         data = {"id": model_id}
 
         request = requests.Request("POST", url, headers=self._get_headers(), json=data)
-
         if return_request:
             return request
 
-        # Prepare and send the request
-        session = requests.Session()
+        # Reuse a singleton session for all send operations, which avoids costly repeated creation.
+        # This improves efficiency, especially when used for many rapid requests.
+        # This session is not shared outside of the client instance and is threadsafe for requests usage.
+        if not hasattr(self, "_session"):
+            self._session = requests.Session()
+
         try:
-            response = session.send(request.prepare())
+            response = self._session.send(request.prepare())
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
@@ -148,7 +162,10 @@ class ModelsManagementClient:
             raise
 
     def get(
-        self, model_id: Optional[str] = None, model_name: Optional[str] = None, return_request: bool = False
+        self,
+        model_id: Optional[str] = None,
+        model_name: Optional[str] = None,
+        return_request: bool = False,
     ) -> Union[Dict[str, Any], requests.Request]:
         """
         Get information about a specific model by its ID or name.
@@ -168,7 +185,9 @@ class ModelsManagementClient:
             NotFoundError: If the model is not found
             requests.exceptions.RequestException: If the request fails with any other error
         """
-        if (model_id is None and model_name is None) or (model_id is not None and model_name is not None):
+        if (model_id is None and model_name is None) or (
+            model_id is not None and model_name is not None
+        ):
             raise ValueError("Exactly one of model_id or model_name must be provided")
 
         # If return_request is True, delegate to info
@@ -202,7 +221,9 @@ class ModelsManagementClient:
             )
         )
 
-    def info(self, return_request: bool = False) -> Union[List[Dict[str, Any]], requests.Request]:
+    def info(
+        self, return_request: bool = False
+    ) -> Union[List[Dict[str, Any]], requests.Request]:
         """
         Get detailed information about all models from the server.
 
