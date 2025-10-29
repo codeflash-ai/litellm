@@ -16,12 +16,18 @@ def can_modify_guardrails(team_obj: Optional[LiteLLM_TeamTable]) -> bool:
     if team_obj is None:
         return True
 
-    team_metadata = team_obj.metadata or {}
+    # Cache metadata and guardrails lookups
+    team_metadata = team_obj.metadata
+    if not team_metadata:
+        return True
 
-    if team_metadata.get("guardrails", None) is not None and isinstance(
-        team_metadata.get("guardrails"), Dict
-    ):
-        if team_metadata.get("guardrails", {}).get("modify_guardrails", None) is False:
+    guardrails = team_metadata.get("guardrails")
+    if guardrails is not None and isinstance(guardrails, Dict):
+        # Directly access "modify_guardrails", avoiding multiple .get lookups
+        if (
+            "modify_guardrails" in guardrails
+            and guardrails["modify_guardrails"] is False
+        ):
             return False
 
     return True
