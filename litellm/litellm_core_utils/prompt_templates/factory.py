@@ -297,19 +297,16 @@ def mistral_instruct_pt(messages):
 
 # Falcon prompt template - from https://github.com/lm-sys/FastChat/blob/main/fastchat/conversation.py#L110
 def falcon_instruct_pt(messages):
-    prompt = ""
+    # Use list for efficient string concatenation
+    parts = []
+    append = parts.append  # Local variable for slight speedup
     for message in messages:
         if message["role"] == "system":
-            prompt += message["content"]
+            append(message["content"])
         else:
-            prompt += (
-                message["role"]
-                + ":"
-                + message["content"].replace("\r\n", "\n").replace("\n\n", "\n")
-            )
-            prompt += "\n\n"
-
-    return prompt
+            content = message["content"].replace("\r\n", "\n").replace("\n\n", "\n")
+            append(f"{message['role']}:{content}\n\n")
+    return "".join(parts)
 
 
 def falcon_chat_pt(messages):
@@ -1205,10 +1202,10 @@ def convert_to_gemini_tool_call_invoke(
         if tool_calls is not None:
             for tool in tool_calls:
                 if "function" in tool:
-                    gemini_function_call: Optional[VertexFunctionCall] = (
-                        _gemini_tool_call_invoke_helper(
-                            function_call_params=tool["function"]
-                        )
+                    gemini_function_call: Optional[
+                        VertexFunctionCall
+                    ] = _gemini_tool_call_invoke_helper(
+                        function_call_params=tool["function"]
                     )
                     if gemini_function_call is not None:
                         _parts_list.append(
@@ -1727,9 +1724,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                             )
 
                             if "cache_control" in _content_element:
-                                _anthropic_content_element["cache_control"] = (
-                                    _content_element["cache_control"]
-                                )
+                                _anthropic_content_element[
+                                    "cache_control"
+                                ] = _content_element["cache_control"]
                             user_content.append(_anthropic_content_element)
                         elif m.get("type", "") == "text":
                             m = cast(ChatCompletionTextObject, m)
@@ -1767,9 +1764,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                     )
 
                     if "cache_control" in _content_element:
-                        _anthropic_content_text_element["cache_control"] = (
-                            _content_element["cache_control"]
-                        )
+                        _anthropic_content_text_element[
+                            "cache_control"
+                        ] = _content_element["cache_control"]
 
                     user_content.append(_anthropic_content_text_element)
 
