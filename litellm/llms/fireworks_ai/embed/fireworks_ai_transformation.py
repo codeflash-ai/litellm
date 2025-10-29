@@ -24,9 +24,12 @@ class FireworksAIEmbeddingConfig:
         No transformation is applied - fireworks ai is openai compatible
         """
         supported_openai_params = self.get_supported_openai_params(model)
-        for param, value in non_default_params.items():
-            if param in supported_openai_params:
-                optional_params[param] = value
+        # Convert supported params to set for fast membership tests
+        if supported_openai_params:
+            supported = set(supported_openai_params)
+            for param, value in non_default_params.items():
+                if param in supported:
+                    optional_params[param] = value
         return optional_params
 
     def is_fireworks_embedding_model(self, model: str):
