@@ -30,8 +30,12 @@ class AzurePassthroughConfig(BasePassthroughConfig):
         if base_target_url is None:
             raise Exception("Azure api base not found")
 
+        # Cache accesses to litellm_metadata and api_version for efficiency
         litellm_metadata = litellm_params.get("litellm_metadata") or {}
         model_group = litellm_metadata.get("model_group")
+        api_version = litellm_params.get("api_version")
+
+        # Only replace endpoint if both model_group and its presence in endpoint are confirmed
         if model_group and model_group in endpoint:
             endpoint = endpoint.replace(model_group, model)
 
@@ -39,7 +43,7 @@ class AzurePassthroughConfig(BasePassthroughConfig):
             api_base=base_target_url,
             litellm_params=litellm_params,
             route=endpoint,
-            default_api_version=litellm_params.get("api_version"),
+            default_api_version=api_version,
         )
         return (
             httpx.URL(complete_url),
