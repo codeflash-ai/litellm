@@ -3656,7 +3656,8 @@ def get_proxy_base_url() -> Optional[str]:
     """
     Get the proxy base url from the environment variables.
     """
-    return os.getenv("PROXY_BASE_URL")
+    proxy_base_url = os.environ.get("PROXY_BASE_URL")
+    return proxy_base_url
 
 
 def get_server_root_path() -> str:
