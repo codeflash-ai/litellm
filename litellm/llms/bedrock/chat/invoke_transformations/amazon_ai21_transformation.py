@@ -46,31 +46,50 @@ class AmazonAI21Config(AmazonInvokeConfig, BaseConfig):
         presencePenalty: Optional[dict] = None,
         countPenalty: Optional[dict] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Avoid creating locals().copy(); directly set attributes for provided arguments
+        # Only set on the class if not None
+        # This preserves behavioral equivalence with the original (note: this still mutates the class, not self)
+        if maxTokens is not None:
+            setattr(self.__class__, "maxTokens", maxTokens)
+        if temperature is not None:
+            setattr(self.__class__, "temperature", temperature)
+        if topP is not None:
+            setattr(self.__class__, "topP", topP)
+        if stopSequences is not None:
+            setattr(self.__class__, "stopSequences", stopSequences)
+        if frequencePenalty is not None:
+            setattr(self.__class__, "frequencePenalty", frequencePenalty)
+        if presencePenalty is not None:
+            setattr(self.__class__, "presencePenalty", presencePenalty)
+        if countPenalty is not None:
+            setattr(self.__class__, "countPenalty", countPenalty)
 
         AmazonInvokeConfig.__init__(self)
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not k.startswith("_abc")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        # Fast-path: avoid repeated attribute lookups and function checks per key, minimize isinstance calls
+        blacklist = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
+        d = cls.__dict__
+        result = {}
+        for k in d:
+            if k.startswith("__") or k.startswith("_abc"):
+                continue
+            v = d[k]
+            # Avoid creating a tuple each time; use blacklist and check None first
+            if v is None:
+                continue
+            # Use type(v) instead of isinstance; slightly faster for known function types
+            vt = type(v)
+            if vt in blacklist:
+                continue
+            result[k] = v
+        return result
 
     def get_supported_openai_params(self, model: str) -> List:
         return [
