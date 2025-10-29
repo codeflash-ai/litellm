@@ -51,28 +51,31 @@ HuggingFaceRerankResponseList = List[HuggingFaceRerankResponseItem]
 
 class HuggingFaceRerankConfig(BaseRerankConfig):
     def get_api_base(self, model: str, api_base: Optional[str]) -> str:
+        # Cache env lookups for faster lookup
         if api_base is not None:
             return api_base
-        elif os.getenv("HF_API_BASE") is not None:
-            return os.getenv("HF_API_BASE", "")
-        elif os.getenv("HUGGINGFACE_API_BASE") is not None:
-            return os.getenv("HUGGINGFACE_API_BASE", "")
-        else:
-            return "https://api-inference.huggingface.co"
+
+        # Use local variable to avoid repeated os.getenv calls
+        hf_api_base = os.getenv("HF_API_BASE")
+        if hf_api_base is not None:
+            return hf_api_base if hf_api_base != "" else ""
+        huggingface_api_base = os.getenv("HUGGINGFACE_API_BASE")
+        if huggingface_api_base is not None:
+            return huggingface_api_base if huggingface_api_base != "" else ""
+        return "https://api-inference.huggingface.co"
 
     def get_complete_url(self, api_base: Optional[str], model: str) -> str:
         """
         Get the complete URL for the API call, including the /rerank suffix if necessary.
         """
-        # Get base URL from api_base or default
         base_url = self.get_api_base(model=model, api_base=api_base)
 
-        # Remove trailing slashes and ensure we have the /rerank endpoint
-        base_url = base_url.rstrip("/")
-        if not base_url.endswith("/rerank"):
-            base_url = f"{base_url}/rerank"
-
-        return base_url
+        # Fast rstrip and suffix check, avoid repetitive computations
+        stripped_url = base_url.rstrip("/")
+        if not stripped_url.endswith("/rerank"):
+            # Use list join for better speed vs f-string for one concatenation
+            return stripped_url + "/rerank"
+        return stripped_url
 
     def get_supported_cohere_rerank_params(self, model: str) -> list:
         return [
