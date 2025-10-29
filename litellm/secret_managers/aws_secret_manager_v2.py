@@ -173,7 +173,9 @@ class AWSSecretsManagerV2(BaseAWSLLM, BaseSecretManager):
         Returns:
             Dictionary of key-value pairs from the primary secret
         """
-        return json.loads(primary_secret_json_str or "{}")
+        if not primary_secret_json_str or primary_secret_json_str == "{}":
+            return {}
+        return json.loads(primary_secret_json_str)
 
     def sync_read_secret_from_primary_secret(
         self, secret_name: str, primary_secret_name: str
