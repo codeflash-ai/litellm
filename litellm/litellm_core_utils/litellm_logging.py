@@ -4480,16 +4480,6 @@ def _get_status_fields(
     Returns:
         StandardLoggingPayloadStatusFields with llm_api_status and guardrail_status
     """
-    # Mapping for legacy guardrail status values to new GuardrailStatus values
-    GUARDRAIL_STATUS_MAP: Dict[str, GuardrailStatus] = {
-        "success": "success",
-        "blocked": "guardrail_intervened",  # legacy
-        "guardrail_intervened": "guardrail_intervened",  # direct
-        "failure": "guardrail_failed_to_respond",  # legacy
-        "guardrail_failed_to_respond": "guardrail_failed_to_respond",  # direct
-        "not_run": "not_run"
-    }
-    
     # Set LLM API status
     llm_api_status: StandardLoggingPayloadStatus = status
     
@@ -4833,6 +4823,16 @@ from decimal import Decimal
 
 # used for unit testing
 from typing import Any, Dict, List, Optional, Union
+
+# Mapping for legacy guardrail status values to new GuardrailStatus values
+GUARDRAIL_STATUS_MAP: Dict[str, GuardrailStatus] = {
+    "success": "success",
+    "blocked": "guardrail_intervened",  # legacy
+    "guardrail_intervened": "guardrail_intervened",  # direct
+    "failure": "guardrail_failed_to_respond",  # legacy
+    "guardrail_failed_to_respond": "guardrail_failed_to_respond",  # direct
+    "not_run": "not_run"
+}
 
 
 def create_dummy_standard_logging_payload() -> StandardLoggingPayload:
