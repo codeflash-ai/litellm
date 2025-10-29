@@ -29,9 +29,10 @@ def process_slack_alerting_variables(
 
     for alert_type, webhook_urls in alert_to_webhook_url.items():
         if isinstance(webhook_urls, list):
+            # Optimize: use startswith instead of in for searching "os.environ/"
             _webhook_values: List[str] = []
             for webhook_url in webhook_urls:
-                if "os.environ/" in webhook_url:
+                if webhook_url.startswith("os.environ/"):
                     _env_value = get_secret(secret_name=webhook_url)
                     if not isinstance(_env_value, str):
                         raise ValueError(
@@ -44,7 +45,7 @@ def process_slack_alerting_variables(
             alert_to_webhook_url[alert_type] = _webhook_values
         else:
             _webhook_value_str: str = webhook_urls
-            if "os.environ/" in webhook_urls:
+            if webhook_urls.startswith("os.environ/"):
                 _env_value = get_secret(secret_name=webhook_urls)
                 if not isinstance(_env_value, str):
                     raise ValueError(
