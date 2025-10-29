@@ -22,7 +22,11 @@ class VectorStoreRegistry:
         self.vector_stores: List[LiteLLM_ManagedVectorStore] = vector_stores
         self.vector_store_ids_to_vector_store_map: Dict[
             str, LiteLLM_ManagedVectorStore
-        ] = {}
+        ] = {
+            vector_store.get("vector_store_id"): vector_store
+            for vector_store in self.vector_stores
+            if "vector_store_id" in vector_store
+        }
 
     def get_vector_store_ids_to_run(
         self, non_default_params: Dict, tools: Optional[List[Dict]] = None
@@ -134,10 +138,7 @@ class VectorStoreRegistry:
         """
         Returns the vector store from the registry
         """
-        for vector_store in self.vector_stores:
-            if vector_store.get("vector_store_id") == vector_store_id:
-                return vector_store
-        return None
+        return self.vector_store_ids_to_vector_store_map.get(vector_store_id)
 
     def pop_vector_stores_to_run(
         self, non_default_params: Dict, tools: Optional[List[Dict]] = None
