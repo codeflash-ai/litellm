@@ -156,6 +156,9 @@ from .specialty_caches.dynamic_logging_cache import DynamicLoggingCache
 
 if TYPE_CHECKING:
     from litellm.llms.base_llm.passthrough.transformation import BasePassthroughConfig
+
+_SHA256_RE = re.compile(r"[a-fA-F0-9]{64}")
+
 try:
     from litellm_enterprise.enterprise_callbacks.callback_controls import (
         EnterpriseCallbackControls,
@@ -3938,7 +3941,7 @@ def use_custom_pricing_for_model(litellm_params: Optional[dict]) -> bool:
 
 def is_valid_sha256_hash(value: str) -> bool:
     # Check if the value is a valid SHA-256 hash (64 hexadecimal characters)
-    return bool(re.fullmatch(r"[a-fA-F0-9]{64}", value))
+    return _SHA256_RE.fullmatch(value) is not None
 
 
 class StandardLoggingPayloadSetup:
