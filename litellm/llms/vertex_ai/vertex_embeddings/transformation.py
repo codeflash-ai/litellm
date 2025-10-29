@@ -51,7 +51,7 @@ class VertexAITextEmbeddingConfig(BaseModel):
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                self.__setattr__(key, value)
 
     @classmethod
     def get_config(cls):
@@ -94,9 +94,9 @@ class VertexAITextEmbeddingConfig(BaseModel):
     def map_special_auth_params(self, non_default_params: dict, optional_params: dict):
         mapped_params = self.get_mapped_special_auth_params()
 
-        for param, value in non_default_params.items():
-            if param in mapped_params:
-                optional_params[mapped_params[param]] = value
+        to_map = set(mapped_params) & non_default_params.keys()
+        for param in to_map:
+            optional_params[mapped_params[param]] = non_default_params[param]
         return optional_params
 
     def transform_openai_request_to_vertex_embedding_request(
