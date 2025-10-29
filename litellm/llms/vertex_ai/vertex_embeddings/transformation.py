@@ -7,6 +7,11 @@ from litellm.types.utils import EmbeddingResponse, Usage
 
 from .types import *
 
+_MAPPED_SPECIAL_AUTH_PARAMS = {
+    "project": "vertex_project",
+    "region_name": "vertex_location",
+}
+
 
 class VertexAITextEmbeddingConfig(BaseModel):
     """
@@ -89,7 +94,7 @@ class VertexAITextEmbeddingConfig(BaseModel):
         """
         Common auth params across bedrock/vertex_ai/azure/watsonx
         """
-        return {"project": "vertex_project", "region_name": "vertex_location"}
+        return _MAPPED_SPECIAL_AUTH_PARAMS
 
     def map_special_auth_params(self, non_default_params: dict, optional_params: dict):
         mapped_params = self.get_mapped_special_auth_params()
