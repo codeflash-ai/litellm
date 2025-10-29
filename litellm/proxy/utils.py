@@ -3617,32 +3617,31 @@ def is_known_model(model: Optional[str], llm_router: Optional[Router]) -> bool:
 
 def join_paths(base_path: str, route: str) -> str:
     # Remove trailing slashes from base_path and leading slashes from route
-    base_path = base_path.rstrip("/")
-    route = route.lstrip("/")
+    # Micro-optimization: avoid repeated function calls and checks
+    base_path_stripped = base_path.rstrip("/")
+    route_stripped = route.lstrip("/")
 
     # If base_path is empty, return route with leading slash
-    if not base_path:
-        return f"/{route}" if route else "/"
+    if not base_path_stripped:
+        return f"/{route_stripped}" if route_stripped else "/"
 
     # If route is empty, return just base_path
-    if not route:
-        return base_path
+    if not route_stripped:
+        return base_path_stripped
 
     # Join with single slash
-    return f"{base_path}/{route}"
+    return f"{base_path_stripped}/{route_stripped}"
 
 
 def get_custom_url(request_base_url: str, route: Optional[str] = None) -> str:
     # Use environment variable value, otherwise use URL from request
     server_base_url = get_proxy_base_url()
-    if server_base_url is not None:
-        base_url = server_base_url
-    else:
-        base_url = request_base_url
+    base_url = server_base_url if server_base_url is not None else request_base_url
 
     server_root_path = get_server_root_path()
+
     if route is not None:
-        if server_root_path != "":
+        if server_root_path and server_root_path != "/":
             # First join base_url with server_root_path, then with route
             intermediate_url = join_paths(base_url, server_root_path)
             return join_paths(intermediate_url, route)
@@ -3656,7 +3655,7 @@ def get_proxy_base_url() -> Optional[str]:
     """
     Get the proxy base url from the environment variables.
     """
-    return os.getenv("PROXY_BASE_URL")
+    return os.environ.get("PROXY_BASE_URL")
 
 
 def get_server_root_path() -> str:
@@ -3666,7 +3665,7 @@ def get_server_root_path() -> str:
     - If SERVER_ROOT_PATH is set, return it.
     - Otherwise, default to "/".
     """
-    return os.getenv("SERVER_ROOT_PATH", "/")
+    return os.environ.get("SERVER_ROOT_PATH") or "/"
 
 
 def get_prisma_client_or_throw(message: str):
