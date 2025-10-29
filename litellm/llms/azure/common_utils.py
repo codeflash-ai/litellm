@@ -713,28 +713,25 @@ class BaseAzureLLM(BaseOpenAILLM):
             default_api_version: The default API version to use if no api_version is provided. If 'latest', it will use `openai/v1/...` route.
         """
 
-        api_base = api_base or litellm.api_base or get_secret_str("AZURE_API_BASE")
+        # Only obtain api_base once and avoid redundant calls
+        if api_base is None:
+            api_base = litellm.api_base or get_secret_str("AZURE_API_BASE")
         if api_base is None:
             raise ValueError(
                 f"api_base is required for Azure AI Studio. Please set the api_base parameter. Passed `api_base={api_base}`"
             )
         original_url = httpx.URL(api_base)
 
-        # Extract api_version or use default
         litellm_params = litellm_params or {}
-        api_version = (
-            cast(Optional[str], litellm_params.get("api_version"))
-            or default_api_version
-        )
+        api_version = cast(Optional[str], litellm_params.get("api_version")) or default_api_version
 
-        # Create a new dictionary with existing params
-        query_params = dict(original_url.params)
+        # Convert QueryParams to dict only if not already dict; avoids unnecessary copy
+        query_params = dict(original_url.params) if original_url.params else {}
 
-        # Add api_version if needed
         if "api-version" not in query_params and api_version:
             query_params["api-version"] = api_version
 
-        # Add the path to the base URL
+        # Only calculate new_url if needed
         if route not in api_base:
             new_url = _add_path_to_api_base(api_base=api_base, ending_path=route)
         else:
@@ -750,8 +747,8 @@ class BaseAzureLLM(BaseOpenAILLM):
                     )
                 )
 
-        # Use the new query_params dictionary
-        final_url = httpx.URL(new_url).copy_with(params=query_params)
+        # Only copy_with if there are query params to add/replace; skip otherwise
+        final_url = httpx.URL(new_url).copy_with(params=query_params) if query_params else httpx.URL(new_url)
 
         return str(final_url)
 
