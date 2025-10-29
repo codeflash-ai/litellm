@@ -1205,10 +1205,10 @@ def convert_to_gemini_tool_call_invoke(
         if tool_calls is not None:
             for tool in tool_calls:
                 if "function" in tool:
-                    gemini_function_call: Optional[VertexFunctionCall] = (
-                        _gemini_tool_call_invoke_helper(
-                            function_call_params=tool["function"]
-                        )
+                    gemini_function_call: Optional[
+                        VertexFunctionCall
+                    ] = _gemini_tool_call_invoke_helper(
+                        function_call_params=tool["function"]
                     )
                     if gemini_function_call is not None:
                         _parts_list.append(
@@ -1727,9 +1727,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                             )
 
                             if "cache_control" in _content_element:
-                                _anthropic_content_element["cache_control"] = (
-                                    _content_element["cache_control"]
-                                )
+                                _anthropic_content_element[
+                                    "cache_control"
+                                ] = _content_element["cache_control"]
                             user_content.append(_anthropic_content_element)
                         elif m.get("type", "") == "text":
                             m = cast(ChatCompletionTextObject, m)
@@ -1767,9 +1767,9 @@ def anthropic_messages_pt(  # noqa: PLR0915
                     )
 
                     if "cache_control" in _content_element:
-                        _anthropic_content_text_element["cache_control"] = (
-                            _content_element["cache_control"]
-                        )
+                        _anthropic_content_text_element[
+                            "cache_control"
+                        ] = _content_element["cache_control"]
 
                     user_content.append(_anthropic_content_text_element)
 
@@ -4072,44 +4072,61 @@ def custom_prompt(
     bos_token: str = "",
     eos_token: str = "",
 ) -> str:
-    prompt = bos_token + initial_prompt_value
+    # Use a list of strings and join at the end for efficient concatenation
+    prompt_parts = []
+    prompt_parts_append = prompt_parts.append
+
+    prompt_parts_append(bos_token)
+    if initial_prompt_value:
+        prompt_parts_append(initial_prompt_value)
     bos_open = True
     ## a bos token is at the start of a system / human message
     ## an eos token is at the end of the assistant response to the message
+
+    # Cache role_dict lookups for speed
+    rd = role_dict
+    roles_with_bos = {"system", "human"}
+
     for message in messages:
         role = message["role"]
 
-        if role in ["system", "human"] and not bos_open:
-            prompt += bos_token
+        if role in roles_with_bos and not bos_open:
+            prompt_parts_append(bos_token)
             bos_open = True
 
-        pre_message_str = (
-            role_dict[role]["pre_message"]
-            if role in role_dict and "pre_message" in role_dict[role]
-            else ""
-        )
-        post_message_str = (
-            role_dict[role]["post_message"]
-            if role in role_dict and "post_message" in role_dict[role]
-            else ""
-        )
-        if isinstance(message["content"], str):
-            prompt += pre_message_str + message["content"] + post_message_str
-        elif isinstance(message["content"], list):
-            text_str = ""
-            for content in message["content"]:
-                if content.get("text", None) is not None and isinstance(
-                    content["text"], str
-                ):
-                    text_str += content["text"]
-            prompt += pre_message_str + text_str + post_message_str
+        role_entry = rd.get(role)
+        if role_entry:
+            pre_message_str = role_entry.get("pre_message", "")
+            post_message_str = role_entry.get("post_message", "")
+        else:
+            pre_message_str = ""
+            post_message_str = ""
+
+        content = message["content"]
+        if isinstance(content, str):
+            # Single string
+            prompt_parts_append(pre_message_str)
+            prompt_parts_append(content)
+            prompt_parts_append(post_message_str)
+        elif isinstance(content, list):
+            # List of dicts; collect valid "text" keys efficiently
+            text_parts = []
+            for content_item in content:
+                text_val = content_item.get("text")
+                if isinstance(text_val, str):
+                    text_parts.append(text_val)
+            prompt_parts_append(pre_message_str)
+            prompt_parts_append("".join(text_parts))
+            prompt_parts_append(post_message_str)
 
         if role == "assistant":
-            prompt += eos_token
+            prompt_parts_append(eos_token)
             bos_open = False
 
-    prompt += final_prompt_value
-    return prompt
+    if final_prompt_value:
+        prompt_parts_append(final_prompt_value)
+    # Join once at the end for optimal performance
+    return "".join(prompt_parts)
 
 
 def prompt_factory(
