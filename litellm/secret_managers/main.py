@@ -40,14 +40,10 @@ def str_to_bool(value: Optional[str]) -> Optional[bool]:
     if value is None:
         return None
 
-    true_values = {"true"}
-    false_values = {"false"}
-
     value_lower = value.strip().lower()
-
-    if value_lower in true_values:
+    if value_lower == "true":
         return True
-    elif value_lower in false_values:
+    elif value_lower == "false":
         return False
     else:
         return None
@@ -141,7 +137,10 @@ def get_secret(  # noqa: PLR0915
             # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-cloud-providers#using-custom-actions
             actions_id_token_request_url = os.getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
             actions_id_token_request_token = os.getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-            if actions_id_token_request_url is None or actions_id_token_request_token is None:
+            if (
+                actions_id_token_request_url is None
+                or actions_id_token_request_token is None
+            ):
                 raise ValueError(
                     "ACTIONS_ID_TOKEN_REQUEST_URL or ACTIONS_ID_TOKEN_REQUEST_TOKEN not found in environment"
                 )
@@ -208,7 +207,10 @@ def get_secret(  # noqa: PLR0915
             raise ValueError("Unsupported OIDC provider")
 
     try:
-        if _should_read_secret_from_secret_manager() and litellm.secret_manager_client is not None:
+        if (
+            _should_read_secret_from_secret_manager()
+            and litellm.secret_manager_client is not None
+        ):
             try:
                 client = litellm.secret_manager_client
                 key_manager = "local"
@@ -234,7 +236,9 @@ def get_secret(  # noqa: PLR0915
                 ):
                     encrypted_secret: Any = os.getenv(secret_name)
                     if encrypted_secret is None:
-                        raise ValueError("Google KMS requires the encrypted secret to be in the environment!")
+                        raise ValueError(
+                            "Google KMS requires the encrypted secret to be in the environment!"
+                        )
                     b64_flag = _is_base64(encrypted_secret)
                     if b64_flag is True:  # if passed in as encoded b64 string
                         encrypted_secret = base64.b64decode(encrypted_secret)
@@ -249,14 +253,20 @@ def get_secret(  # noqa: PLR0915
                             "ciphertext": ciphertext,
                         }
                     )
-                    secret = response.plaintext.decode("utf-8")  # assumes the original value was encoded with utf-8
+                    secret = response.plaintext.decode(
+                        "utf-8"
+                    )  # assumes the original value was encoded with utf-8
                 elif key_manager == KeyManagementSystem.AWS_KMS.value:
                     """
                     Only check the tokens which start with 'aws_kms/'. This prevents latency impact caused by checking all keys.
                     """
                     encrypted_value = os.getenv(secret_name, None)
                     if encrypted_value is None:
-                        raise Exception("AWS KMS - Encrypted Value of Key={} is None".format(secret_name))
+                        raise Exception(
+                            "AWS KMS - Encrypted Value of Key={} is None".format(
+                                secret_name
+                            )
+                        )
                     # Decode the base64 encoded ciphertext
                     ciphertext_blob = base64.b64decode(encrypted_value)
 
@@ -283,10 +293,14 @@ def get_secret(  # noqa: PLR0915
                         print_verbose(f"get_secret_value_response: {secret}")
                 elif key_manager == KeyManagementSystem.GOOGLE_SECRET_MANAGER.value:
                     try:
-                        secret = client.get_secret_from_google_secret_manager(secret_name)
+                        secret = client.get_secret_from_google_secret_manager(
+                            secret_name
+                        )
                         print_verbose(f"secret from google secret manager:  {secret}")
                         if secret is None:
-                            raise ValueError(f"No secret found in Google Secret Manager for {secret_name}")
+                            raise ValueError(
+                                f"No secret found in Google Secret Manager for {secret_name}"
+                            )
                     except Exception as e:
                         print_verbose(f"An error occurred - {str(e)}")
                         raise e
@@ -294,7 +308,9 @@ def get_secret(  # noqa: PLR0915
                     try:
                         secret = client.sync_read_secret(secret_name=secret_name)
                         if secret is None:
-                            raise ValueError(f"No secret found in Hashicorp Secret Manager for {secret_name}")
+                            raise ValueError(
+                                f"No secret found in Hashicorp Secret Manager for {secret_name}"
+                            )
                     except Exception as e:
                         print_verbose(f"An error occurred - {str(e)}")
                         raise e
@@ -319,7 +335,9 @@ def get_secret(  # noqa: PLR0915
         else:
             secret = os.environ.get(secret_name)
             secret_value_as_bool = str_to_bool(secret) if secret is not None else None
-            if secret_value_as_bool is not None and isinstance(secret_value_as_bool, bool):
+            if secret_value_as_bool is not None and isinstance(
+                secret_value_as_bool, bool
+            ):
                 return secret_value_as_bool
             else:
                 return secret
