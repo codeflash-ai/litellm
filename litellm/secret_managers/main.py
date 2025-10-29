@@ -11,9 +11,8 @@ import litellm
 from litellm._logging import print_verbose, verbose_logger
 from litellm.caching.caching import DualCache
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
-from litellm.secret_managers.get_azure_ad_token_provider import (
-    get_azure_ad_token_provider,
-)
+from litellm.secret_managers.get_azure_ad_token_provider import \
+    get_azure_ad_token_provider
 from litellm.types.secret_managers.main import KeyManagementSystem
 
 oidc_cache = DualCache()
@@ -60,6 +59,11 @@ def get_secret_str(
     """
     Guarantees response from 'get_secret' is either string or none. Used for fixing linting errors.
     """
+    # Fast path: check environment variable first to avoid expensive get_secret call
+    env_value = os.environ.get(secret_name)
+    if env_value is not None:
+        return env_value
+
     value = get_secret(secret_name=secret_name, default_value=default_value)
     if value is not None and not isinstance(value, str):
         return None
@@ -271,9 +275,8 @@ def get_secret(  # noqa: PLR0915
                     if isinstance(secret, str):
                         secret = secret.strip()
                 elif key_manager == KeyManagementSystem.AWS_SECRET_MANAGER.value:
-                    from litellm.secret_managers.aws_secret_manager_v2 import (
-                        AWSSecretsManagerV2,
-                    )
+                    from litellm.secret_managers.aws_secret_manager_v2 import \
+                        AWSSecretsManagerV2
 
                     if isinstance(client, AWSSecretsManagerV2):
                         secret = client.sync_read_secret(
