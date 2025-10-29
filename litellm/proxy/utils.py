@@ -3504,21 +3504,20 @@ def _merge_guardrails_with_existing(data: dict, model_level_guardrails: Any) -> 
 def get_error_message_str(e: Exception) -> str:
     error_message = ""
     if isinstance(e, HTTPException):
-        if isinstance(e.detail, str):
-            error_message = e.detail
-        elif isinstance(e.detail, dict):
-            error_message = json.dumps(e.detail)
+        detail = e.detail
+        if isinstance(detail, str):
+            return detail
+        elif isinstance(detail, dict):
+            return json.dumps(detail)
+        # Directly use hasattr/getattr only if above fails
         elif hasattr(e, "message"):
             _error = getattr(e, "message", None)
             if isinstance(_error, str):
-                error_message = _error
+                return _error
             elif isinstance(_error, dict):
-                error_message = json.dumps(_error)
-        else:
-            error_message = str(e)
-    else:
-        error_message = str(e)
-    return error_message
+                return json.dumps(_error)
+        return str(e)
+    return str(e)
 
 
 def _get_redoc_url() -> Optional[str]:
