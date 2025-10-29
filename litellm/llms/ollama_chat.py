@@ -373,7 +373,7 @@ async def ollama_acompletion(
                 "json": data,
             }
             if api_key is not None:
-                _request["headers"] = {"Authorization": "Bearer {}".format(api_key)}
+                _request["headers"] = {"Authorization": f"Bearer {api_key}"}
             resp = await session.post(**_request)
 
             if resp.status != 200:
@@ -381,7 +381,8 @@ async def ollama_acompletion(
                 raise OllamaError(status_code=resp.status, message=text)
 
             response_json = await resp.json()
-
+            # Reference choice only once
+            choice0 = model_response.choices[0]
             ## LOGGING
             logging_obj.post_call(
                 input=data,
@@ -394,10 +395,11 @@ async def ollama_acompletion(
             )
 
             ## RESPONSE OBJECT
-            model_response.choices[0].finish_reason = "stop"
+            choice0.finish_reason = "stop"
 
+            msg_dict = response_json.get("message")
             if data.get("format", "") == "json" and function_name is not None:
-                function_call = json.loads(response_json["message"]["content"])
+                function_call = json.loads(msg_dict["content"])
                 message = litellm.Message(
                     content=None,
                     tool_calls=[
@@ -413,21 +415,28 @@ async def ollama_acompletion(
                         }
                     ],
                 )
-                model_response.choices[0].message = message  # type: ignore
-                model_response.choices[0].finish_reason = "tool_calls"
+                choice0.message = message  # type: ignore
+                choice0.finish_reason = "tool_calls"
             else:
-                _message = litellm.Message(**response_json["message"])
-                model_response.choices[0].message = _message  # type: ignore
+                # _message assignment is expensive; minimize repetitions
+                _message = litellm.Message(**msg_dict)
+                choice0.message = _message  # type: ignore
 
             model_response.created = int(time.time())
             model_response.model = "ollama_chat/" + data["model"]
-            prompt_tokens = response_json.get("prompt_eval_count", litellm.token_counter(messages=data["messages"]))  # type: ignore
-            completion_tokens = response_json.get(
-                "eval_count",
-                litellm.token_counter(
-                    text=response_json["message"]["content"], count_response_tokens=True
-                ),
-            )
+
+            # Efficient token assignment: only call expensive fallback if needed
+            prompt_tokens = response_json.get("prompt_eval_count")
+            if prompt_tokens is None:
+                prompt_tokens = litellm.token_counter(messages=data["messages"])  # type: ignore
+
+            message_content = msg_dict.get("content")
+            completion_tokens = response_json.get("eval_count")
+            if completion_tokens is None:
+                completion_tokens = litellm.token_counter(
+                    text=message_content, count_response_tokens=True
+                )
+
             setattr(
                 model_response,
                 "usage",
