@@ -39,15 +39,13 @@ class CustomOpenAPISpec:
         Returns:
             JSON schema dict or None if failed
         """
+        # Try fastest path first; exception as rare case
         try:
-            # Try Pydantic v2 method first
             return model_class.model_json_schema()  # type: ignore
         except AttributeError:
             try:
-                # Fallback to Pydantic v1 method
                 return model_class.schema()  # type: ignore
             except AttributeError:
-                # If both methods fail, return None
                 return None
     
     @staticmethod
@@ -60,14 +58,10 @@ class CustomOpenAPISpec:
             schema_name: Name for the schema component
             schema_def: The schema definition
         """
-        # Ensure components/schemas structure exists
-        if "components" not in openapi_schema:
-            openapi_schema["components"] = {}
-        if "schemas" not in openapi_schema["components"]:
-            openapi_schema["components"]["schemas"] = {}
-        
-        # Add the schema
-        openapi_schema["components"]["schemas"][schema_name] = schema_def
+        # Avoid redundant .get; use setdefault for single pass creation
+        components = openapi_schema.setdefault("components", {})
+        schemas = components.setdefault("schemas", {})
+        schemas[schema_name] = schema_def
     
     @staticmethod
     def add_request_body_to_paths(openapi_schema: Dict[str, Any], paths: List[str], schema_ref: str) -> None:
@@ -80,41 +74,40 @@ class CustomOpenAPISpec:
             paths: List of paths to update
             schema_ref: Reference to the schema component (e.g., "#/components/schemas/ModelName")
         """
+        paths_dict = openapi_schema.get("paths", {})
+
+        # Prepare components lookup just once
+        schemas = openapi_schema.get("components", {}).get("schemas", {})
+        schema_name = schema_ref.split("/")[-1]  # e.g., "ProxyChatCompletionRequest"
+        actual_schema = schemas.get(schema_name, {})
+
+        schema_properties = actual_schema.get("properties", {})
+        required_fields = actual_schema.get("required", [])
+
+        expanded_schema = {
+            "type": "object",
+            "required": required_fields,
+            "properties": {}
+        }
+        # Build expanded_schema["properties"] efficiently
+        for field_name, field_def in schema_properties.items():
+            expanded_field = CustomOpenAPISpec._expand_field_definition(field_def)
+            if field_name == "messages":
+                expanded_field["example"] = [
+                    {"role": "user", "content": "Hello, how are you?"}
+                ]
+            expanded_schema["properties"][field_name] = expanded_field
+
+        # Copy $defs if present (complex types support)
+        if "$defs" in actual_schema:
+            expanded_schema["$defs"] = actual_schema["$defs"]
+
+        # Cache constructed post_key for reuse
         for path in paths:
-            if path in openapi_schema.get("paths", {}) and "post" in openapi_schema["paths"][path]:
-                # Get the actual schema to extract ALL field definitions
-                schema_name = schema_ref.split("/")[-1]  # Extract "ProxyChatCompletionRequest" from the ref
-                actual_schema = openapi_schema.get("components", {}).get("schemas", {}).get(schema_name, {})
-                schema_properties = actual_schema.get("properties", {})
-                required_fields = actual_schema.get("required", [])
-                
-                # Create an expanded inline schema instead of just a $ref
-                # This makes Swagger UI show all individual fields in the request body editor
-                expanded_schema = {
-                    "type": "object",
-                    "required": required_fields,
-                    "properties": {}
-                }
-                
-                # Add all properties with their full definitions
-                for field_name, field_def in schema_properties.items():
-                    expanded_field = CustomOpenAPISpec._expand_field_definition(field_def)
-                    
-                    # Add a simple example for the messages field
-                    if field_name == "messages":
-                        expanded_field["example"] = [
-                            {"role": "user", "content": "Hello, how are you?"}
-                        ]
-                    
-                    expanded_schema["properties"][field_name] = expanded_field
-                
-                # Include $defs from the original schema to support complex types like AllMessageValues
-                # This ensures that message types and other complex union types work properly
-                if "$defs" in actual_schema:
-                    expanded_schema["$defs"] = actual_schema["$defs"]
-                
-                # Set the request body with the expanded schema
-                openapi_schema["paths"][path]["post"]["requestBody"] = {
+            path_item = paths_dict.get(path)
+            if path_item and "post" in path_item:
+                post_key = path_item["post"]
+                post_key["requestBody"] = {
                     "required": True,
                     "content": {
                         "application/json": {
@@ -122,16 +115,13 @@ class CustomOpenAPISpec:
                         }
                     }
                 }
-                
-                # Keep any existing parameters (like path parameters) but remove conflicting query params
-                if "parameters" in openapi_schema["paths"][path]["post"]:
-                    existing_params = openapi_schema["paths"][path]["post"]["parameters"]
-                    # Only keep path parameters, remove query params that conflict with request body
+                # Filter parameters in-place only if "parameters" present
+                if "parameters" in post_key:
                     filtered_params = [
-                        param for param in existing_params 
+                        param for param in post_key["parameters"]
                         if param.get("in") == "path"
                     ]
-                    openapi_schema["paths"][path]["post"]["parameters"] = filtered_params
+                    post_key["parameters"] = filtered_params
     
     @staticmethod
     def _extract_field_schema(field_def: Dict[str, Any]) -> Dict[str, Any]:
@@ -198,29 +188,20 @@ class CustomOpenAPISpec:
             Modified OpenAPI schema
         """
         try:
-            # Get the schema for the model class
             request_schema = CustomOpenAPISpec.get_pydantic_schema(model_class)
-            
-            # Only proceed if we successfully got the schema
             if request_schema is not None:
-                # Add schema to components
                 CustomOpenAPISpec.add_schema_to_components(openapi_schema, schema_name, request_schema)
-                
-                # Add request body to specified endpoints
                 CustomOpenAPISpec.add_request_body_to_paths(
-                    openapi_schema, 
-                    paths, 
+                    openapi_schema,
+                    paths,
                     f"#/components/schemas/{schema_name}"
                 )
-                
                 verbose_proxy_logger.debug(f"Successfully added {schema_name} schema to OpenAPI spec")
             else:
                 verbose_proxy_logger.debug(f"Could not get schema for {schema_name}")
-                
         except Exception as e:
-            # If schema addition fails, continue without it
             verbose_proxy_logger.debug(f"Failed to add {operation_name} request schema: {str(e)}")
-        
+
         return openapi_schema
     
     @staticmethod
