@@ -91,18 +91,15 @@ class DatabricksBase:
 
         if headers is None:
             headers = {
-                "Authorization": "Bearer {}".format(api_key),
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             }
         else:
             if api_key is not None:
-                headers.update({"Authorization": "Bearer {}".format(api_key)})
-
-        if api_key is not None:
-            headers["Authorization"] = f"Bearer {api_key}"
+                headers["Authorization"] = f"Bearer {api_key}"
 
         if endpoint_type == "chat_completions" and custom_endpoint is not True:
-            api_base = "{}/chat/completions".format(api_base)
+            api_base = f"{api_base}/chat/completions"
         elif endpoint_type == "embeddings" and custom_endpoint is not True:
-            api_base = "{}/embeddings".format(api_base)
+            api_base = f"{api_base}/embeddings"
         return api_base, headers
