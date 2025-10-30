@@ -56,20 +56,16 @@ class AmazonStabilityConfig:
 
     @classmethod
     def get_config(cls):
+        skip_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
         return {
             k: v
             for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
+            if not k.startswith("__") and type(v) not in skip_types and v is not None
         }
 
     @classmethod
