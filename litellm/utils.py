@@ -24,7 +24,6 @@ import random  # type: ignore
 import re
 import struct
 import subprocess
-
 # What is this?
 ## Generic utils.py file. Problem-specific utils (e.g. 'cost calculation), should all be in `litellm_core_utils/`.
 import sys
@@ -59,151 +58,100 @@ import litellm.litellm_core_utils.audio_utils.utils
 import litellm.litellm_core_utils.json_validation_rule
 import litellm.llms
 import litellm.llms.gemini
+from litellm._logging import verbose_logger
 from litellm._uuid import uuid
 from litellm.caching._internal_lru_cache import lru_cache_wrapper
 from litellm.caching.caching import DualCache
-from litellm.caching.caching_handler import CachingHandlerResponse, LLMCachingHandler
-from litellm.constants import (
-    DEFAULT_CHAT_COMPLETION_PARAM_VALUES,
-    DEFAULT_EMBEDDING_PARAM_VALUES,
-    DEFAULT_MAX_LRU_CACHE_SIZE,
-    DEFAULT_TRIM_RATIO,
-    FUNCTION_DEFINITION_TOKEN_COUNT,
-    INITIAL_RETRY_DELAY,
-    JITTER,
-    MAX_RETRY_DELAY,
-    MAX_TOKEN_TRIMMING_ATTEMPTS,
-    MINIMUM_PROMPT_CACHE_TOKEN_COUNT,
-    OPENAI_EMBEDDING_PARAMS,
-    TOOL_CHOICE_OBJECT_TOKEN_COUNT,
-)
+from litellm.caching.caching_handler import (CachingHandlerResponse,
+                                             LLMCachingHandler)
+from litellm.constants import (DEFAULT_CHAT_COMPLETION_PARAM_VALUES,
+                               DEFAULT_EMBEDDING_PARAM_VALUES,
+                               DEFAULT_MAX_LRU_CACHE_SIZE, DEFAULT_TRIM_RATIO,
+                               FUNCTION_DEFINITION_TOKEN_COUNT,
+                               INITIAL_RETRY_DELAY, JITTER, MAX_RETRY_DELAY,
+                               MAX_TOKEN_TRIMMING_ATTEMPTS,
+                               MINIMUM_PROMPT_CACHE_TOKEN_COUNT,
+                               OPENAI_EMBEDDING_PARAMS,
+                               TOOL_CHOICE_OBJECT_TOKEN_COUNT)
 from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.integrations.custom_logger import CustomLogger
-from litellm.integrations.vector_store_integrations.base_vector_store import (
-    BaseVectorStore,
-)
-
+from litellm.integrations.vector_store_integrations.base_vector_store import \
+    BaseVectorStore
 # Import cached imports utilities
 from litellm.litellm_core_utils.cached_imports import (
-    get_coroutine_checker,
-    get_litellm_logging_class,
-    get_set_callbacks,
-)
+    get_coroutine_checker, get_litellm_logging_class, get_set_callbacks)
 from litellm.litellm_core_utils.core_helpers import (
-    get_litellm_metadata_from_kwargs,
-    map_finish_reason,
-    process_response_headers,
-)
+    get_litellm_metadata_from_kwargs, map_finish_reason,
+    process_response_headers)
 from litellm.litellm_core_utils.credential_accessor import CredentialAccessor
 from litellm.litellm_core_utils.default_encoding import encoding
 from litellm.litellm_core_utils.exception_mapping_utils import (
-    _get_response_headers,
-    exception_type,
-    get_error_message,
-)
+    _get_response_headers, exception_type, get_error_message)
 from litellm.litellm_core_utils.get_litellm_params import (
-    _get_base_model_from_litellm_call_metadata,
-    get_litellm_params,
-)
+    _get_base_model_from_litellm_call_metadata, get_litellm_params)
 from litellm.litellm_core_utils.get_llm_provider_logic import (
-    _is_non_openai_azure_model,
-    get_llm_provider,
-)
-from litellm.litellm_core_utils.get_supported_openai_params import (
-    get_supported_openai_params,
-)
-from litellm.litellm_core_utils.llm_request_utils import _ensure_extra_body_is_safe
+    _is_non_openai_azure_model, get_llm_provider)
+from litellm.litellm_core_utils.get_supported_openai_params import \
+    get_supported_openai_params
+from litellm.litellm_core_utils.llm_request_utils import \
+    _ensure_extra_body_is_safe
 from litellm.litellm_core_utils.llm_response_utils.convert_dict_to_response import (
-    LiteLLMResponseObjectHandler,
-    _handle_invalid_parallel_tool_calls,
-    convert_to_model_response_object,
-    convert_to_streaming_response,
-    convert_to_streaming_response_async,
-)
-from litellm.litellm_core_utils.llm_response_utils.get_api_base import get_api_base
-from litellm.litellm_core_utils.llm_response_utils.get_formatted_prompt import (
-    get_formatted_prompt,
-)
-from litellm.litellm_core_utils.llm_response_utils.get_headers import (
-    get_response_headers,
-)
-from litellm.litellm_core_utils.llm_response_utils.response_metadata import (
-    ResponseMetadata,
-)
-from litellm.litellm_core_utils.prompt_templates.common_utils import (
-    _parse_content_for_reasoning,
-)
+    LiteLLMResponseObjectHandler, _handle_invalid_parallel_tool_calls,
+    convert_to_model_response_object, convert_to_streaming_response,
+    convert_to_streaming_response_async)
+from litellm.litellm_core_utils.llm_response_utils.get_api_base import \
+    get_api_base
+from litellm.litellm_core_utils.llm_response_utils.get_formatted_prompt import \
+    get_formatted_prompt
+from litellm.litellm_core_utils.llm_response_utils.get_headers import \
+    get_response_headers
+from litellm.litellm_core_utils.llm_response_utils.response_metadata import \
+    ResponseMetadata
+from litellm.litellm_core_utils.prompt_templates.common_utils import \
+    _parse_content_for_reasoning
 from litellm.litellm_core_utils.redact_messages import (
-    LiteLLMLoggingObject,
-    redact_message_input_output_from_logging,
-)
+    LiteLLMLoggingObject, redact_message_input_output_from_logging)
 from litellm.litellm_core_utils.rules import Rules
 from litellm.litellm_core_utils.streaming_handler import CustomStreamWrapper
 from litellm.litellm_core_utils.token_counter import get_modified_max_tokens
-from litellm.llms.base_llm.google_genai.transformation import (
-    BaseGoogleGenAIGenerateContentConfig,
-)
+from litellm.llms.base_llm.google_genai.transformation import \
+    BaseGoogleGenAIGenerateContentConfig
 from litellm.llms.base_llm.ocr.transformation import BaseOCRConfig
-from litellm.llms.base_llm.text_to_speech.transformation import (
-    BaseTextToSpeechConfig,
-)
+from litellm.llms.base_llm.text_to_speech.transformation import \
+    BaseTextToSpeechConfig
 from litellm.llms.bedrock.common_utils import BedrockModelInfo
-from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
+from litellm.llms.custom_httpx.http_handler import (AsyncHTTPHandler,
+                                                    HTTPHandler)
 from litellm.llms.mistral.ocr.transformation import MistralOCRConfig
 from litellm.router_utils.get_retry_from_policy import (
-    get_num_retries_from_retry_policy,
-    reset_retry_policy,
-)
+    get_num_retries_from_retry_policy, reset_retry_policy)
 from litellm.secret_managers.main import get_secret
-from litellm.types.llms.anthropic import (
-    ANTHROPIC_API_ONLY_HEADERS,
-    AnthropicThinkingParam,
-)
-from litellm.types.llms.openai import (
-    AllMessageValues,
-    AllPromptValues,
-    ChatCompletionAssistantToolCall,
-    ChatCompletionNamedToolChoiceParam,
-    ChatCompletionToolParam,
-    ChatCompletionToolParamFunctionChunk,
-    OpenAITextCompletionUserMessage,
-    OpenAIWebSearchOptions,
-)
+from litellm.types.llms.anthropic import (ANTHROPIC_API_ONLY_HEADERS,
+                                          AnthropicThinkingParam)
+from litellm.types.llms.openai import (AllMessageValues, AllPromptValues,
+                                       ChatCompletionAssistantToolCall,
+                                       ChatCompletionNamedToolChoiceParam,
+                                       ChatCompletionToolParam,
+                                       ChatCompletionToolParamFunctionChunk,
+                                       OpenAITextCompletionUserMessage,
+                                       OpenAIWebSearchOptions)
 from litellm.types.rerank import RerankResponse
 from litellm.types.utils import FileTypes  # type: ignore
-from litellm.types.utils import (
-    OPENAI_RESPONSE_HEADERS,
-    CallTypes,
-    ChatCompletionDeltaToolCall,
-    ChatCompletionMessageToolCall,
-    Choices,
-    CostPerToken,
-    CredentialItem,
-    CustomHuggingfaceTokenizer,
-    Delta,
-    Embedding,
-    EmbeddingResponse,
-    Function,
-    ImageResponse,
-    LlmProviders,
-    LlmProvidersSet,
-    LLMResponseTypes,
-    Message,
-    ModelInfo,
-    ModelInfoBase,
-    ModelResponse,
-    ModelResponseStream,
-    ProviderField,
-    ProviderSpecificModelInfo,
-    RawRequestTypedDict,
-    SelectTokenizerResponse,
-    StreamingChoices,
-    TextChoices,
-    TextCompletionResponse,
-    TranscriptionResponse,
-    Usage,
-    all_litellm_params,
-)
+from litellm.types.utils import (OPENAI_RESPONSE_HEADERS, CallTypes,
+                                 ChatCompletionDeltaToolCall,
+                                 ChatCompletionMessageToolCall, Choices,
+                                 CostPerToken, CredentialItem,
+                                 CustomHuggingfaceTokenizer, Delta, Embedding,
+                                 EmbeddingResponse, Function, ImageResponse,
+                                 LlmProviders, LlmProvidersSet,
+                                 LLMResponseTypes, Message, ModelInfo,
+                                 ModelInfoBase, ModelResponse,
+                                 ModelResponseStream, ProviderField,
+                                 ProviderSpecificModelInfo,
+                                 RawRequestTypedDict, SelectTokenizerResponse,
+                                 StreamingChoices, TextChoices,
+                                 TextCompletionResponse, TranscriptionResponse,
+                                 Usage, all_litellm_params)
 
 try:
     # Python 3.9+
@@ -220,89 +168,56 @@ except (ImportError, AttributeError, TypeError):
 # Convert to str (if necessary)
 claude_json_str = json.dumps(json_data)
 import importlib.metadata
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    cast,
-    get_args,
-)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, List,
+                    Literal, Optional, Tuple, Type, Union, cast, get_args)
 
 from openai import OpenAIError as OriginalError
 
-from litellm.litellm_core_utils.llm_response_utils.response_metadata import (
-    update_response_metadata,
-)
+from litellm.litellm_core_utils.llm_response_utils.response_metadata import \
+    update_response_metadata
 from litellm.litellm_core_utils.thread_pool_executor import executor
-from litellm.litellm_core_utils.token_counter import token_counter as token_counter_new
-from litellm.llms.base_llm.anthropic_messages.transformation import (
-    BaseAnthropicMessagesConfig,
-)
-from litellm.llms.base_llm.audio_transcription.transformation import (
-    BaseAudioTranscriptionConfig,
-)
-from litellm.llms.base_llm.base_utils import (
-    BaseLLMModelInfo,
-    type_to_response_format_param,
-)
+from litellm.litellm_core_utils.token_counter import \
+    token_counter as token_counter_new
+from litellm.llms.base_llm.anthropic_messages.transformation import \
+    BaseAnthropicMessagesConfig
+from litellm.llms.base_llm.audio_transcription.transformation import \
+    BaseAudioTranscriptionConfig
+from litellm.llms.base_llm.base_utils import (BaseLLMModelInfo,
+                                              type_to_response_format_param)
 from litellm.llms.base_llm.batches.transformation import BaseBatchesConfig
 from litellm.llms.base_llm.chat.transformation import BaseConfig
-from litellm.llms.base_llm.completion.transformation import BaseTextCompletionConfig
+from litellm.llms.base_llm.completion.transformation import \
+    BaseTextCompletionConfig
 from litellm.llms.base_llm.embedding.transformation import BaseEmbeddingConfig
 from litellm.llms.base_llm.files.transformation import BaseFilesConfig
 from litellm.llms.base_llm.image_edit.transformation import BaseImageEditConfig
-from litellm.llms.base_llm.image_generation.transformation import (
-    BaseImageGenerationConfig,
-)
-from litellm.llms.base_llm.image_variations.transformation import (
-    BaseImageVariationConfig,
-)
-from litellm.llms.base_llm.passthrough.transformation import BasePassthroughConfig
+from litellm.llms.base_llm.image_generation.transformation import \
+    BaseImageGenerationConfig
+from litellm.llms.base_llm.image_variations.transformation import \
+    BaseImageVariationConfig
+from litellm.llms.base_llm.passthrough.transformation import \
+    BasePassthroughConfig
 from litellm.llms.base_llm.realtime.transformation import BaseRealtimeConfig
 from litellm.llms.base_llm.rerank.transformation import BaseRerankConfig
-from litellm.llms.base_llm.responses.transformation import BaseResponsesAPIConfig
-from litellm.llms.base_llm.vector_store.transformation import BaseVectorStoreConfig
+from litellm.llms.base_llm.responses.transformation import \
+    BaseResponsesAPIConfig
+from litellm.llms.base_llm.vector_store.transformation import \
+    BaseVectorStoreConfig
 
 from ._logging import _is_debugging_on, verbose_logger
-from .caching.caching import (
-    AzureBlobCache,
-    Cache,
-    QdrantSemanticCache,
-    RedisCache,
-    RedisSemanticCache,
-    S3Cache,
-)
-from .exceptions import (
-    APIConnectionError,
-    APIError,
-    AuthenticationError,
-    BadRequestError,
-    BudgetExceededError,
-    ContentPolicyViolationError,
-    ContextWindowExceededError,
-    NotFoundError,
-    OpenAIError,
-    PermissionDeniedError,
-    RateLimitError,
-    ServiceUnavailableError,
-    Timeout,
-    UnprocessableEntityError,
-    UnsupportedParamsError,
-)
+from .caching.caching import (AzureBlobCache, Cache, QdrantSemanticCache,
+                              RedisCache, RedisSemanticCache, S3Cache)
+from .exceptions import (APIConnectionError, APIError, AuthenticationError,
+                         BadRequestError, BudgetExceededError,
+                         ContentPolicyViolationError,
+                         ContextWindowExceededError, NotFoundError,
+                         OpenAIError, PermissionDeniedError, RateLimitError,
+                         ServiceUnavailableError, Timeout,
+                         UnprocessableEntityError, UnsupportedParamsError)
 from .proxy._types import AllowedModelRegion, KeyManagementSystem
-from .types.llms.openai import (
-    ChatCompletionDeltaToolCallChunk,
-    ChatCompletionToolCallChunk,
-    ChatCompletionToolCallFunctionChunk,
-)
+from .types.llms.openai import (ChatCompletionDeltaToolCallChunk,
+                                ChatCompletionToolCallChunk,
+                                ChatCompletionToolCallFunctionChunk)
 from .types.router import LiteLLM_Params
 
 ####### ENVIRONMENT VARIABLES ####################
@@ -398,9 +313,8 @@ def _add_custom_logger_callback_to_specific_event(
     Add a custom logger callback to the specific event
     """
     from litellm import _custom_logger_compatible_callbacks_literal
-    from litellm.litellm_core_utils.litellm_logging import (
-        _init_custom_logger_compatible_class,
-    )
+    from litellm.litellm_core_utils.litellm_logging import \
+        _init_custom_logger_compatible_class
 
     if callback not in litellm._known_custom_logger_compatible_callbacks:
         verbose_logger.debug(
@@ -698,7 +612,8 @@ def function_setup(  # noqa: PLR0915
 
         if add_breadcrumb:
             try:
-                from litellm.litellm_core_utils.core_helpers import safe_deep_copy
+                from litellm.litellm_core_utils.core_helpers import \
+                    safe_deep_copy
 
                 details_to_log = safe_deep_copy(kwargs)
             except Exception:
@@ -857,7 +772,8 @@ async def _client_async_logging_helper(
         ################################################
         # Async Logging Worker
         ################################################
-        from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
+        from litellm.litellm_core_utils.logging_worker import \
+            GLOBAL_LOGGING_WORKER
 
         GLOBAL_LOGGING_WORKER.ensure_initialized_and_enqueue(
             async_coroutine=logging_obj.async_success_handler(
@@ -5086,12 +5002,20 @@ def get_model_info(model: str, custom_llm_provider: Optional[str] = None) -> Mod
         model=model, custom_llm_provider=custom_llm_provider
     )
 
+    # If supported_openai_params is None, most likely model is unmapped, fail fast
+    if supported_openai_params is None:
+        raise Exception(
+            "This model isn't mapped yet. model={}, custom_llm_provider={}. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json.".format(
+                model, custom_llm_provider
+            )
+        )
+
     _model_info = _get_model_info_helper(
         model=model,
         custom_llm_provider=custom_llm_provider,
     )
-
-    verbose_logger.debug(f"model_info: {_model_info}")
+    # Avoid unnecessary debug string formatting before slow operations
+    verbose_logger.debug("model_info loaded for model: %s", model)
 
     returned_model_info = ModelInfo(
         **_model_info, supported_openai_params=supported_openai_params
@@ -6755,14 +6679,12 @@ def add_dummy_tool(custom_llm_provider: str) -> List[ChatCompletionToolParam]:
     ]
 
 
-from litellm.types.llms.openai import (
-    ChatCompletionAudioObject,
-    ChatCompletionImageObject,
-    ChatCompletionTextObject,
-    ChatCompletionUserMessage,
-    OpenAIMessageContent,
-    ValidUserMessageContentTypes,
-)
+from litellm.types.llms.openai import (ChatCompletionAudioObject,
+                                       ChatCompletionImageObject,
+                                       ChatCompletionTextObject,
+                                       ChatCompletionUserMessage,
+                                       OpenAIMessageContent,
+                                       ValidUserMessageContentTypes)
 
 
 def convert_to_dict(message: Union[BaseModel, dict]) -> dict:
@@ -6889,8 +6811,7 @@ def validate_chat_completion_tool_choice(
     """
     from litellm.types.llms.openai import (
         ChatCompletionToolChoiceObjectParam,
-        ChatCompletionToolChoiceStringValues,
-    )
+        ChatCompletionToolChoiceStringValues)
 
     if tool_choice is None:
         return tool_choice
@@ -6971,9 +6892,8 @@ class ProviderConfigManager:
             elif "claude" in model:
                 return litellm.VertexAIAnthropicConfig()
             elif "gpt-oss" in model:
-                from litellm.llms.vertex_ai.vertex_ai_partner_models.gpt_oss.transformation import (
-                    VertexAIGPTOSSTransformation,
-                )
+                from litellm.llms.vertex_ai.vertex_ai_partner_models.gpt_oss.transformation import \
+                    VertexAIGPTOSSTransformation
 
                 return VertexAIGPTOSSTransformation()
             elif model in litellm.vertex_mistral_models:
@@ -7126,9 +7046,8 @@ class ProviderConfigManager:
             if bedrock_route == "converse" or bedrock_route == "converse_like":
                 return litellm.AmazonConverseConfig()
             elif bedrock_route == "agent":
-                from litellm.llms.bedrock.chat.invoke_agent.transformation import (
-                    AmazonInvokeAgentConfig,
-                )
+                from litellm.llms.bedrock.chat.invoke_agent.transformation import \
+                    AmazonInvokeAgentConfig
 
                 return AmazonInvokeAgentConfig()
             elif bedrock_invoke_provider == "amazon":  # amazon titan llms
@@ -7201,19 +7120,18 @@ class ProviderConfigManager:
             litellm.LlmProviders.COHERE == provider
             or litellm.LlmProviders.COHERE_CHAT == provider
         ):
-            from litellm.llms.cohere.embed.transformation import CohereEmbeddingConfig
+            from litellm.llms.cohere.embed.transformation import \
+                CohereEmbeddingConfig
 
             return CohereEmbeddingConfig()
         elif litellm.LlmProviders.JINA_AI == provider:
-            from litellm.llms.jina_ai.embedding.transformation import (
-                JinaAIEmbeddingConfig,
-            )
+            from litellm.llms.jina_ai.embedding.transformation import \
+                JinaAIEmbeddingConfig
 
             return JinaAIEmbeddingConfig()
         elif litellm.LlmProviders.VOLCENGINE == provider:
-            from litellm.llms.volcengine.embedding.transformation import (
-                VolcEngineEmbeddingConfig,
-            )
+            from litellm.llms.volcengine.embedding.transformation import \
+                VolcEngineEmbeddingConfig
 
             return VolcEngineEmbeddingConfig()
         elif litellm.LlmProviders.OVHCLOUD == provider:
@@ -7221,9 +7139,8 @@ class ProviderConfigManager:
         elif litellm.LlmProviders.COMETAPI == provider:
             return litellm.CometAPIEmbeddingConfig()
         elif litellm.LlmProviders.SAGEMAKER == provider:
-            from litellm.llms.sagemaker.embedding.transformation import (
-                SagemakerEmbeddingConfig,
-            )
+            from litellm.llms.sagemaker.embedding.transformation import \
+                SagemakerEmbeddingConfig
             return SagemakerEmbeddingConfig.get_model_config(model)
         return None
 
@@ -7273,9 +7190,8 @@ class ProviderConfigManager:
             return BedrockModelInfo.get_bedrock_provider_config_for_messages_api(model)
         elif litellm.LlmProviders.VERTEX_AI == provider:
             if "claude" in model:
-                from litellm.llms.vertex_ai.vertex_ai_partner_models.anthropic.experimental_pass_through.transformation import (
-                    VertexAIPartnerModelsAnthropicMessagesConfig,
-                )
+                from litellm.llms.vertex_ai.vertex_ai_partner_models.anthropic.experimental_pass_through.transformation import \
+                    VertexAIPartnerModelsAnthropicMessagesConfig
 
                 return VertexAIPartnerModelsAnthropicMessagesConfig()
         return None
@@ -7290,9 +7206,8 @@ class ProviderConfigManager:
         elif litellm.LlmProviders.DEEPGRAM == provider:
             return litellm.DeepgramAudioTranscriptionConfig()
         elif litellm.LlmProviders.ELEVENLABS == provider:
-            from litellm.llms.elevenlabs.audio_transcription.transformation import (
-                ElevenLabsAudioTranscriptionConfig,
-            )
+            from litellm.llms.elevenlabs.audio_transcription.transformation import \
+                ElevenLabsAudioTranscriptionConfig
 
             return ElevenLabsAudioTranscriptionConfig()
         elif litellm.LlmProviders.OPENAI == provider:
@@ -7301,9 +7216,8 @@ class ProviderConfigManager:
             else:
                 return litellm.OpenAIWhisperAudioTranscriptionConfig()
         elif litellm.LlmProviders.HOSTED_VLLM == provider:
-            from litellm.llms.hosted_vllm.transcriptions.transformation import (
-                HostedVLLMAudioTranscriptionConfig,
-            )
+            from litellm.llms.hosted_vllm.transcriptions.transformation import \
+                HostedVLLMAudioTranscriptionConfig
 
             return HostedVLLMAudioTranscriptionConfig()
         return None
@@ -7365,9 +7279,8 @@ class ProviderConfigManager:
 
             return OllamaModelInfo()
         elif LlmProviders.VLLM == provider or LlmProviders.HOSTED_VLLM == provider:
-            from litellm.llms.vllm.common_utils import (
-                VLLMModelInfo,  # experimental approach, to reduce bloat on __init__.py
-            )
+            from litellm.llms.vllm.common_utils import \
+                VLLMModelInfo  # experimental approach, to reduce bloat on __init__.py
 
             return VLLMModelInfo()
         elif LlmProviders.LEMONADE == provider:
@@ -7382,21 +7295,18 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BasePassthroughConfig]:
         if LlmProviders.BEDROCK == provider:
-            from litellm.llms.bedrock.passthrough.transformation import (
-                BedrockPassthroughConfig,
-            )
+            from litellm.llms.bedrock.passthrough.transformation import \
+                BedrockPassthroughConfig
 
             return BedrockPassthroughConfig()
         elif LlmProviders.VLLM == provider:
-            from litellm.llms.vllm.passthrough.transformation import (
-                VLLMPassthroughConfig,
-            )
+            from litellm.llms.vllm.passthrough.transformation import \
+                VLLMPassthroughConfig
 
             return VLLMPassthroughConfig()
         elif LlmProviders.AZURE == provider:
-            from litellm.llms.azure.passthrough.transformation import (
-                AzurePassthroughConfig,
-            )
+            from litellm.llms.azure.passthrough.transformation import \
+                AzurePassthroughConfig
 
             return AzurePassthroughConfig()
         return None
@@ -7418,17 +7328,18 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BaseFilesConfig]:
         if LlmProviders.GEMINI == provider:
-            from litellm.llms.gemini.files.transformation import (
-                GoogleAIStudioFilesHandler,  # experimental approach, to reduce bloat on __init__.py
-            )
+            from litellm.llms.gemini.files.transformation import \
+                GoogleAIStudioFilesHandler  # experimental approach, to reduce bloat on __init__.py
 
             return GoogleAIStudioFilesHandler()
         elif LlmProviders.VERTEX_AI == provider:
-            from litellm.llms.vertex_ai.files.transformation import VertexAIFilesConfig
+            from litellm.llms.vertex_ai.files.transformation import \
+                VertexAIFilesConfig
 
             return VertexAIFilesConfig()
         elif LlmProviders.BEDROCK == provider:
-            from litellm.llms.bedrock.files.transformation import BedrockFilesConfig
+            from litellm.llms.bedrock.files.transformation import \
+                BedrockFilesConfig
 
             return BedrockFilesConfig()
         return None
@@ -7439,7 +7350,8 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BaseBatchesConfig]:
         if LlmProviders.BEDROCK == provider:
-            from litellm.llms.bedrock.batches.transformation import BedrockBatchesConfig
+            from litellm.llms.bedrock.batches.transformation import \
+                BedrockBatchesConfig
 
             return BedrockBatchesConfig()
         return None
@@ -7448,9 +7360,8 @@ class ProviderConfigManager:
     def get_provider_vector_store_config(
         provider: LlmProviders,
     ) -> Optional[CustomLogger]:
-        from litellm.integrations.vector_store_integrations.bedrock_vector_store import (
-            BedrockVectorStore,
-        )
+        from litellm.integrations.vector_store_integrations.bedrock_vector_store import \
+            BedrockVectorStore
 
         if LlmProviders.BEDROCK == provider:
             return BedrockVectorStore.get_initialized_custom_logger()
@@ -7464,33 +7375,28 @@ class ProviderConfigManager:
         v2 vector store config, use this for new vector store integrations
         """
         if litellm.LlmProviders.OPENAI == provider:
-            from litellm.llms.openai.vector_stores.transformation import (
-                OpenAIVectorStoreConfig,
-            )
+            from litellm.llms.openai.vector_stores.transformation import \
+                OpenAIVectorStoreConfig
 
             return OpenAIVectorStoreConfig()
         elif litellm.LlmProviders.AZURE == provider:
-            from litellm.llms.azure.vector_stores.transformation import (
-                AzureOpenAIVectorStoreConfig,
-            )
+            from litellm.llms.azure.vector_stores.transformation import \
+                AzureOpenAIVectorStoreConfig
 
             return AzureOpenAIVectorStoreConfig()
         elif litellm.LlmProviders.VERTEX_AI == provider:
-            from litellm.llms.vertex_ai.vector_stores.transformation import (
-                VertexVectorStoreConfig,
-            )
+            from litellm.llms.vertex_ai.vector_stores.transformation import \
+                VertexVectorStoreConfig
 
             return VertexVectorStoreConfig()
         elif litellm.LlmProviders.BEDROCK == provider:
-            from litellm.llms.bedrock.vector_stores.transformation import (
-                BedrockVectorStoreConfig,
-            )
+            from litellm.llms.bedrock.vector_stores.transformation import \
+                BedrockVectorStoreConfig
 
             return BedrockVectorStoreConfig()
         elif litellm.LlmProviders.PG_VECTOR == provider:
-            from litellm.llms.pg_vector.vector_stores.transformation import (
-                PGVectorStoreConfig,
-            )
+            from litellm.llms.pg_vector.vector_stores.transformation import \
+                PGVectorStoreConfig
 
             return PGVectorStoreConfig()
         return None
@@ -7501,57 +7407,48 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BaseImageGenerationConfig]:
         if LlmProviders.OPENAI == provider:
-            from litellm.llms.openai.image_generation import (
-                get_openai_image_generation_config,
-            )
+            from litellm.llms.openai.image_generation import \
+                get_openai_image_generation_config
 
             return get_openai_image_generation_config(model)
         elif LlmProviders.AZURE == provider:
-            from litellm.llms.azure.image_generation import (
-                get_azure_image_generation_config,
-            )
+            from litellm.llms.azure.image_generation import \
+                get_azure_image_generation_config
 
             return get_azure_image_generation_config(model)
         elif LlmProviders.AZURE_AI == provider:
-            from litellm.llms.azure_ai.image_generation import (
-                get_azure_ai_image_generation_config,
-            )
+            from litellm.llms.azure_ai.image_generation import \
+                get_azure_ai_image_generation_config
 
             return get_azure_ai_image_generation_config(model)
         elif LlmProviders.XINFERENCE == provider:
-            from litellm.llms.xinference.image_generation import (
-                get_xinference_image_generation_config,
-            )
+            from litellm.llms.xinference.image_generation import \
+                get_xinference_image_generation_config
 
             return get_xinference_image_generation_config(model)
         elif LlmProviders.RECRAFT == provider:
-            from litellm.llms.recraft.image_generation import (
-                get_recraft_image_generation_config,
-            )
+            from litellm.llms.recraft.image_generation import \
+                get_recraft_image_generation_config
 
             return get_recraft_image_generation_config(model)
         elif LlmProviders.AIML == provider:
-            from litellm.llms.aiml.image_generation import (
-                get_aiml_image_generation_config,
-            )
+            from litellm.llms.aiml.image_generation import \
+                get_aiml_image_generation_config
 
             return get_aiml_image_generation_config(model)
         elif LlmProviders.COMETAPI == provider:
-            from litellm.llms.cometapi.image_generation import (
-                get_cometapi_image_generation_config,
-            )
+            from litellm.llms.cometapi.image_generation import \
+                get_cometapi_image_generation_config
 
             return get_cometapi_image_generation_config(model)
         elif LlmProviders.GEMINI == provider:
-            from litellm.llms.gemini.image_generation import (
-                get_gemini_image_generation_config,
-            )
+            from litellm.llms.gemini.image_generation import \
+                get_gemini_image_generation_config
 
             return get_gemini_image_generation_config(model)
         elif LlmProviders.LITELLM_PROXY == provider:
-            from litellm.llms.litellm_proxy.image_generation.transformation import (
-                LiteLLMProxyImageGenerationConfig,
-            )
+            from litellm.llms.litellm_proxy.image_generation.transformation import \
+                LiteLLMProxyImageGenerationConfig
 
             return LiteLLMProxyImageGenerationConfig()
         return None
@@ -7562,7 +7459,8 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BaseRealtimeConfig]:
         if LlmProviders.GEMINI == provider:
-            from litellm.llms.gemini.realtime.transformation import GeminiRealtimeConfig
+            from litellm.llms.gemini.realtime.transformation import \
+                GeminiRealtimeConfig
 
             return GeminiRealtimeConfig()
         return None
@@ -7573,29 +7471,28 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BaseImageEditConfig]:
         if LlmProviders.OPENAI == provider:
-            from litellm.llms.openai.image_edit import get_openai_image_edit_config
+            from litellm.llms.openai.image_edit import \
+                get_openai_image_edit_config
 
             return get_openai_image_edit_config(model=model)
         elif LlmProviders.AZURE == provider:
-            from litellm.llms.azure.image_edit.transformation import (
-                AzureImageEditConfig,
-            )
+            from litellm.llms.azure.image_edit.transformation import \
+                AzureImageEditConfig
 
             return AzureImageEditConfig()
         elif LlmProviders.RECRAFT == provider:
-            from litellm.llms.recraft.image_edit.transformation import (
-                RecraftImageEditConfig,
-            )
+            from litellm.llms.recraft.image_edit.transformation import \
+                RecraftImageEditConfig
 
             return RecraftImageEditConfig()
         elif LlmProviders.AZURE_AI == provider:
-            from litellm.llms.azure_ai.image_edit import get_azure_ai_image_edit_config
+            from litellm.llms.azure_ai.image_edit import \
+                get_azure_ai_image_edit_config
 
             return get_azure_ai_image_edit_config(model)
         elif LlmProviders.LITELLM_PROXY == provider:
-            from litellm.llms.litellm_proxy.image_edit.transformation import (
-                LiteLLMProxyImageEditConfig,
-            )
+            from litellm.llms.litellm_proxy.image_edit.transformation import \
+                LiteLLMProxyImageEditConfig
 
             return LiteLLMProxyImageEditConfig()
         return None
@@ -7627,17 +7524,15 @@ class ProviderConfigManager:
         """
         Get text-to-speech configuration for a given provider.
         """
-        from litellm.llms.base_llm.text_to_speech.transformation import (
-            BaseTextToSpeechConfig,
-        )
+        from litellm.llms.base_llm.text_to_speech.transformation import \
+            BaseTextToSpeechConfig
 
         if litellm.LlmProviders.AZURE == provider:
             # Only return Azure AVA config for Azure Speech Service models (speech/)
             # Azure OpenAI TTS models (azure/azure-tts) should not use this config
             if model.startswith("speech/"):
-                from litellm.llms.azure.text_to_speech.transformation import (
-                    AzureAVATextToSpeechConfig,
-                )
+                from litellm.llms.azure.text_to_speech.transformation import \
+                    AzureAVATextToSpeechConfig
 
                 return AzureAVATextToSpeechConfig()
         return None
@@ -7648,18 +7543,15 @@ class ProviderConfigManager:
         provider: LlmProviders,
     ) -> Optional[BaseGoogleGenAIGenerateContentConfig]:
         if litellm.LlmProviders.GEMINI == provider:
-            from litellm.llms.gemini.google_genai.transformation import (
-                GoogleGenAIConfig,
-            )
+            from litellm.llms.gemini.google_genai.transformation import \
+                GoogleGenAIConfig
 
             return GoogleGenAIConfig()
         elif litellm.LlmProviders.VERTEX_AI == provider:
-            from litellm.llms.vertex_ai.google_genai.transformation import (
-                VertexAIGoogleGenAIConfig,
-            )
-            from litellm.llms.vertex_ai.vertex_ai_partner_models.main import (
-                VertexAIPartnerModels,
-            )
+            from litellm.llms.vertex_ai.google_genai.transformation import \
+                VertexAIGoogleGenAIConfig
+            from litellm.llms.vertex_ai.vertex_ai_partner_models.main import \
+                VertexAIPartnerModels
 
             #########################################################
             # If Vertex Partner models like Anthropic, Mistral, etc. are used,
