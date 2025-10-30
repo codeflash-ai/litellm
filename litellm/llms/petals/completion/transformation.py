@@ -37,9 +37,7 @@ class PetalsConfig(BaseConfig):
     """
 
     max_length: Optional[int] = None
-    max_new_tokens: Optional[
-        int
-    ] = litellm.max_tokens  # petals requires max tokens to be set
+    max_new_tokens: Optional[int] = litellm.max_tokens  # petals requires max tokens to be set
     do_sample: Optional[bool] = None
     temperature: Optional[float] = None
     top_k: Optional[int] = None
@@ -49,30 +47,35 @@ class PetalsConfig(BaseConfig):
     def __init__(
         self,
         max_length: Optional[int] = None,
-        max_new_tokens: Optional[
-            int
-        ] = litellm.max_tokens,  # petals requires max tokens to be set
+        max_new_tokens: Optional[int] = litellm.max_tokens,  # petals requires max tokens to be set
         do_sample: Optional[bool] = None,
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Avoid using setattr on the class, and only set instance attributes for non-None values
+        if max_length is not None:
+            self.max_length = max_length
+        if max_new_tokens is not None:
+            self.max_new_tokens = max_new_tokens
+        if do_sample is not None:
+            self.do_sample = do_sample
+        if temperature is not None:
+            self.temperature = temperature
+        if top_k is not None:
+            self.top_k = top_k
+        if top_p is not None:
+            self.top_p = top_p
+        if repetition_penalty is not None:
+            self.repetition_penalty = repetition_penalty
 
     @classmethod
     def get_config(cls):
         return super().get_config()
 
-    def get_error_class(
-        self, error_message: str, status_code: int, headers: Union[dict, Headers]
-    ) -> BaseLLMException:
-        return PetalsError(
-            status_code=status_code, message=error_message, headers=headers
-        )
+    def get_error_class(self, error_message: str, status_code: int, headers: Union[dict, Headers]) -> BaseLLMException:
+        return PetalsError(status_code=status_code, message=error_message, headers=headers)
 
     def get_supported_openai_params(self, model: str) -> List:
         return ["max_tokens", "temperature", "top_p", "stream"]
@@ -84,15 +87,17 @@ class PetalsConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
-        for param, value in non_default_params.items():
-            if param == "max_tokens":
-                optional_params["max_new_tokens"] = value
-            if param == "temperature":
-                optional_params["temperature"] = value
-            if param == "top_p":
-                optional_params["top_p"] = value
-            if param == "stream":
-                optional_params["stream"] = value
+        # Fast-path optimization: merge/translate only for relevant params, avoid repeated equality checks in loop
+        # Inline mapping table avoids string comparisons for each param per loop
+        _param_map = {
+            "max_tokens": "max_new_tokens",
+            "temperature": "temperature",
+            "top_p": "top_p",
+            "stream": "stream",
+        }
+        for param in _param_map:
+            if param in non_default_params:
+                optional_params[_param_map[param]] = non_default_params[param]
         return optional_params
 
     def transform_request(
