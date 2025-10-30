@@ -154,29 +154,22 @@ class CohereChatConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
+        param_map = {
+            "stream": "stream",
+            "temperature": "temperature",
+            "max_tokens": "max_tokens",
+            "max_completion_tokens": "max_tokens",
+            "n": "num_generations",
+            "top_p": "p",
+            "frequency_penalty": "frequency_penalty",
+            "presence_penalty": "presence_penalty",
+            "stop": "stop_sequences",
+            "tools": "tools",
+            "seed": "seed",
+        }
         for param, value in non_default_params.items():
-            if param == "stream":
-                optional_params["stream"] = value
-            if param == "temperature":
-                optional_params["temperature"] = value
-            if param == "max_tokens":
-                optional_params["max_tokens"] = value
-            if param == "max_completion_tokens":
-                optional_params["max_tokens"] = value
-            if param == "n":
-                optional_params["num_generations"] = value
-            if param == "top_p":
-                optional_params["p"] = value
-            if param == "frequency_penalty":
-                optional_params["frequency_penalty"] = value
-            if param == "presence_penalty":
-                optional_params["presence_penalty"] = value
-            if param == "stop":
-                optional_params["stop_sequences"] = value
-            if param == "tools":
-                optional_params["tools"] = value
-            if param == "seed":
-                optional_params["seed"] = value
+            if param in param_map:
+                optional_params[param_map[param]] = value
         return optional_params
 
     def transform_request(
@@ -232,9 +225,7 @@ class CohereChatConfig(BaseConfig):
             raw_response_json = raw_response.json()
             model_response.choices[0].message.content = raw_response_json["text"]  # type: ignore
         except Exception:
-            raise CohereError(
-                message=raw_response.text, status_code=raw_response.status_code
-            )
+            raise CohereError(message=raw_response.text, status_code=raw_response.status_code)
 
         ## ADD CITATIONS
         if "citations" in raw_response_json:
@@ -338,14 +329,8 @@ class CohereChatConfig(BaseConfig):
             "parameter_definitions": {},
         }
 
-        for param_name, param_def in openai_tool["function"]["parameters"][
-            "properties"
-        ].items():
-            required_params = (
-                openai_tool.get("function", {})
-                .get("parameters", {})
-                .get("required", [])
-            )
+        for param_name, param_def in openai_tool["function"]["parameters"]["properties"].items():
+            required_params = openai_tool.get("function", {}).get("parameters", {}).get("required", [])
             cohere_param_def = {
                 "description": param_def.get("description", ""),
                 "type": param_def.get("type", ""),
