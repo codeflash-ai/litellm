@@ -14,6 +14,7 @@ class ModelGroupsManagementClient:
         """
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
+        self._session = requests.Session()
 
     def _get_headers(self) -> Dict[str, str]:
         """
@@ -27,7 +28,9 @@ class ModelGroupsManagementClient:
             headers["Authorization"] = f"Bearer {self._api_key}"
         return headers
 
-    def info(self, return_request: bool = False) -> Union[List[Dict[str, Any]], requests.Request]:
+    def info(
+        self, return_request: bool = False
+    ) -> Union[List[Dict[str, Any]], requests.Request]:
         """
         Get detailed information about all model groups from the server.
 
@@ -49,9 +52,8 @@ class ModelGroupsManagementClient:
             return request
 
         # Prepare and send the request
-        session = requests.Session()
         try:
-            response = session.send(request.prepare())
+            response = self._session.send(request.prepare())
             response.raise_for_status()
             return response.json()["data"]
         except requests.exceptions.HTTPError as e:
