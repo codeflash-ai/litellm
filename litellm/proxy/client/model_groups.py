@@ -14,6 +14,9 @@ class ModelGroupsManagementClient:
         """
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
+        self._headers: Dict[str, str] = (
+            {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        )
 
     def _get_headers(self) -> Dict[str, str]:
         """
@@ -22,12 +25,11 @@ class ModelGroupsManagementClient:
         Returns:
             Dict[str, str]: Headers to use for API requests
         """
-        headers = {}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
+        return self._headers
 
-    def info(self, return_request: bool = False) -> Union[List[Dict[str, Any]], requests.Request]:
+    def info(
+        self, return_request: bool = False
+    ) -> Union[List[Dict[str, Any]], requests.Request]:
         """
         Get detailed information about all model groups from the server.
 
