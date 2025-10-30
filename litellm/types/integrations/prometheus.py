@@ -8,6 +8,10 @@ from typing_extensions import Annotated
 
 import litellm
 
+_SANITIZE_LABEL_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+_VALID_FIRST_CHAR = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")
+
 
 def _sanitize_prometheus_label_name(label: str) -> str:
     """
@@ -28,10 +32,11 @@ def _sanitize_prometheus_label_name(label: str) -> str:
 
     # Replace all invalid characters with underscores
     # Keep only letters, digits, and underscores
-    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", label)
+    sanitized = _SANITIZE_LABEL_RE.sub("_", label)
 
     # Ensure first character is valid (letter or underscore)
-    if sanitized and not re.match(r"^[a-zA-Z_]", sanitized[0]):
+    # Use set lookup instead of re.match for single char
+    if sanitized and sanitized[0] not in _VALID_FIRST_CHAR:
         sanitized = "_" + sanitized
 
     # Handle empty string after sanitization
