@@ -296,13 +296,22 @@ class CustomGuardrail(CustomLogger):
         eg. if `self.event_hook == "pre_call" and event_type == "post_call"` -> then False
         """
 
-        if self.event_hook is None:
+        event_hook = self.event_hook
+        et_value = event_type.value
+
+        if event_hook is None:
             return True
-        if isinstance(self.event_hook, list):
-            return event_type.value in self.event_hook
-        if isinstance(self.event_hook, Mode):
-            return event_type.value in self.event_hook.tags.values()
-        return self.event_hook == event_type.value
+        if isinstance(event_hook, list):
+            if not hasattr(self, '_event_hook_set') or self._event_hook_set_source is not event_hook:
+                self._event_hook_set = set(event_hook)
+                self._event_hook_set_source = event_hook
+            return et_value in self._event_hook_set
+        if isinstance(event_hook, Mode):
+            tags_values = event_hook.tags.values()
+            if not hasattr(event_hook, '_tags_value_set'):
+                event_hook._tags_value_set = set(tags_values)
+            return et_value in event_hook._tags_value_set
+        return event_hook == et_value
 
     def get_guardrail_dynamic_request_body_params(self, request_data: dict) -> dict:
         """
