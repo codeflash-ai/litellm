@@ -131,6 +131,14 @@ class CustomGuardrail(CustomLogger):
         requested_guardrails: Union[List[str], List[Dict[str, DynamicGuardrailParams]]],
     ) -> bool:
 
+        guardrail_name = self.guardrail_name
+        if guardrail_name is None:
+            return False
+
+        # If requested_guardrails is a list of strings
+        if requested_guardrails and isinstance(requested_guardrails[0], str):
+            return guardrail_name in requested_guardrails
+
         for _guardrail in requested_guardrails:
             if isinstance(_guardrail, dict):
                 if self.guardrail_name in _guardrail:
