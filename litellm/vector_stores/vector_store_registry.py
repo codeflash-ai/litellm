@@ -276,19 +276,21 @@ class VectorStoreRegistry:
         """
         Get vector stores from the database
         """
-        vector_stores_from_db: List[LiteLLM_ManagedVectorStore] = []
-        if prisma_client is not None:
-            _vector_stores_from_db = (
-                await prisma_client.db.litellm_managedvectorstorestable.find_many(
-                    order={"created_at": "desc"},
-                )
+        if prisma_client is None:
+            return []
+
+        _vector_stores_from_db = (
+            await prisma_client.db.litellm_managedvectorstorestable.find_many(
+                order={"created_at": "desc"},
             )
-            for vector_store in _vector_stores_from_db:
-                _dict_vector_store = dict(vector_store)
-                _litellm_managed_vector_store = LiteLLM_ManagedVectorStore(
-                    **_dict_vector_store
-                )
-                vector_stores_from_db.append(_litellm_managed_vector_store)
+        )
+
+        # Preallocate list and avoid intermediate variables in loop
+        vector_stores_from_db: List[LiteLLM_ManagedVectorStore] = [
+            LiteLLM_ManagedVectorStore(**dict(vector_store))
+            for vector_store in _vector_stores_from_db
+        ]
+
         return vector_stores_from_db
 
     def get_credentials_for_vector_store(self, vector_store_id: str) -> Dict[str, Any]:
