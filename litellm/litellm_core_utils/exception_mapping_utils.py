@@ -96,20 +96,14 @@ def get_error_message(error_obj) -> Optional[str]:
         'request_id': 'req_f287898caa6364cd42bc01355f74dd2a'
     }
     """
-    try:
-        # First, try to access the message directly from the 'body' key
-        if error_obj is None:
-            return None
-
-        if hasattr(error_obj, "body"):
-            _error_obj_body = getattr(error_obj, "body")
-            if isinstance(_error_obj_body, dict):
-                return _error_obj_body.get("message")
-
-        # If all else fails, return None
+    if error_obj is None:
         return None
-    except Exception:
-        return None
+
+    body = getattr(error_obj, "body", None)
+    if isinstance(body, dict):
+        return body.get("message")
+
+    return None
 
 
 ####### EXCEPTION MAPPING ################
