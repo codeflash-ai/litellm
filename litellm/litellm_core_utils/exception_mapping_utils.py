@@ -119,20 +119,20 @@ def _get_response_headers(original_exception: Exception) -> Optional[httpx.Heade
 
     Used for accurate retry logic.
     """
-    _response_headers: Optional[httpx.Headers] = None
     try:
-        _response_headers = getattr(original_exception, "headers", None)
-        error_response = getattr(original_exception, "response", None)
-        if not _response_headers and error_response:
-            _response_headers = getattr(error_response, "headers", None)
+        # Direct attribute access is faster than getattr when attribute is known.
+        _response_headers: Optional[httpx.Headers] = getattr(original_exception, "headers", None)
         if not _response_headers:
-            _response_headers = getattr(
-                original_exception, "litellm_response_headers", None
-            )
+            error_response = getattr(original_exception, "response", None)
+            if error_response is not None:
+                # Try fast path first; object attribute lookup will be faster than getattr
+                headers = getattr(error_response, "headers", None)
+                if headers is not None:
+                    return headers
+            _response_headers = getattr(original_exception, "litellm_response_headers", None)
+        return _response_headers
     except Exception:
         return None
-
-    return _response_headers
 
 
 import re
