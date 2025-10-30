@@ -24,15 +24,17 @@ def validate_environment():
 
 
 def load_aws_kms(use_aws_kms: Optional[bool]):
-    if use_aws_kms is None or use_aws_kms is False:
+    if not use_aws_kms:
         return
+
+    # Only import if needed, as in original
     try:
+        # Minimize attribute access and reuse local variables
+        validate_environment()
+        region = os.environ["AWS_REGION_NAME"]
         import boto3
 
-        validate_environment()
-
-        # Create a Secrets Manager client
-        kms_client = boto3.client("kms", region_name=os.getenv("AWS_REGION_NAME"))
+        kms_client = boto3.client("kms", region_name=region)
 
         litellm.secret_manager_client = kms_client
         litellm._key_management_system = KeyManagementSystem.AWS_KMS
