@@ -736,12 +736,17 @@ class BaseLLMHTTPHandler:
         Some providers like Bedrock invoke do not support the stream parameter in the request body, we only pass `stream` in the request body the provider supports it.
         """
 
-        if fake_stream is True:
-            # remove 'stream' from data
-            new_data = data.copy()
-            new_data.pop("stream", None)
-            return new_data
-        if provider_config.supports_stream_param_in_request_body is True:
+        # Fast path: avoid unnecessary dict copy/pop
+        if fake_stream:
+            # Only copy if 'stream' is in data to avoid unnecessary overhead
+            if "stream" in data:
+                new_data = data.copy()
+                del new_data["stream"]
+                return new_data
+            # If "stream" not in data, return original dict (behavioral preservation)
+            return data
+
+        if provider_config.supports_stream_param_in_request_body:
             data["stream"] = True
         return data
 
