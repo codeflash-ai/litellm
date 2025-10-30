@@ -465,10 +465,15 @@ def _custom_logger_class_exists_in_success_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
-    return any(
-        isinstance(cb, type(callback_class))
-        for cb in litellm.success_callback + litellm._async_success_callback
-    )
+    cb_type = type(callback_class)
+    # Combine callbacks and use generator for faster exits on first match
+    for cb in litellm.success_callback:
+        if isinstance(cb, cb_type):
+            return True
+    for cb in litellm._async_success_callback:
+        if isinstance(cb, cb_type):
+            return True
+    return False
 
 
 def _custom_logger_class_exists_in_failure_callbacks(
