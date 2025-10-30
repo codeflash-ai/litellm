@@ -12,14 +12,25 @@ from litellm.types.llms.openai import (
 
 def is_tokens_or_list_of_tokens(value: List):
     # Check if it's a list of integers (tokens)
-    if isinstance(value, list) and all(isinstance(item, int) for item in value):
-        return True
+    if isinstance(value, list):
+        for item in value:
+            if not isinstance(item, int):
+                break
+        else:
+            return True
     # Check if it's a list of lists of integers (list of tokens)
-    if isinstance(value, list) and all(
-        isinstance(item, list) and all(isinstance(i, int) for i in item)
-        for item in value
-    ):
-        return True
+    if isinstance(value, list):
+        for item in value:
+            if not isinstance(item, list):
+                break
+            for i in item:
+                if not isinstance(i, int):
+                    break
+            else:
+                continue
+            break
+        else:
+            return True
     return False
 
 
