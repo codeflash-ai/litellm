@@ -23,6 +23,11 @@ class VectorStoreRegistry:
         self.vector_store_ids_to_vector_store_map: Dict[
             str, LiteLLM_ManagedVectorStore
         ] = {}
+        # Build index for fast lookup
+        for idx, vector_store in enumerate(self.vector_stores):
+            vector_store_id = vector_store.get("vector_store_id")
+            if vector_store_id is not None:
+                self.vector_store_ids_to_vector_store_map[vector_store_id] = idx
 
     def get_vector_store_ids_to_run(
         self, non_default_params: Dict, tools: Optional[List[Dict]] = None
@@ -259,11 +264,16 @@ class VectorStoreRegistry:
         self, vector_store_id: str, updated_data: LiteLLM_ManagedVectorStore
     ):
         """Update or add a vector store in the registry"""
-        for i, vector_store in enumerate(self.vector_stores):
-            if vector_store.get("vector_store_id") == vector_store_id:
-                self.vector_stores[i] = updated_data
-                return
-        self.vector_stores.append(updated_data)
+        idx = self.vector_store_ids_to_vector_store_map.get(vector_store_id)
+        if idx is not None:
+            self.vector_stores[idx] = updated_data
+        else:
+            self.vector_stores.append(updated_data)
+            new_idx = len(self.vector_stores) - 1
+            # Only map if the updated_data contains a vector_store_id
+            store_id = updated_data.get("vector_store_id")
+            if store_id is not None:
+                self.vector_store_ids_to_vector_store_map[store_id] = new_idx
 
     #########################################################
     ########### DB management helpers for vector stores ###########
