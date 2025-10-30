@@ -23,6 +23,7 @@ from ..common_utils import OpenRouterException
 
 class CacheControlSupportedModels(str, Enum):
     """Models that support cache_control in content blocks."""
+
     CLAUDE = "claude"
     GEMINI = "gemini"
 
@@ -50,22 +51,29 @@ class OpenrouterConfig(OpenAIGPTConfig):
             extra_body["models"] = models
         if route is not None:
             extra_body["route"] = route
-        mapped_openai_params["extra_body"] = (
-            extra_body  # openai client supports `extra_body` param
-        )
+        mapped_openai_params[
+            "extra_body"
+        ] = extra_body  # openai client supports `extra_body` param
         return mapped_openai_params
 
     def _supports_cache_control_in_content(self, model: str) -> bool:
         """
         Check if the model supports cache_control in content blocks.
-        
+
         Returns:
             bool: True if model supports cache_control (Claude or Gemini models)
         """
         model_lower = model.lower()
+        # Build set of all supported substrings once for efficiency
+        # If CacheControlSupportedModels doesn't change often, this is faster
+        # since set membership is O(1) and avoids repeated iteration
+        if not hasattr(self, "_cache_control_supported_substrings"):
+            self._cache_control_supported_substrings = {
+                supported_model.value for supported_model in CacheControlSupportedModels
+            }
         return any(
-            supported_model.value in model_lower
-            for supported_model in CacheControlSupportedModels
+            substring in model_lower
+            for substring in self._cache_control_supported_substrings
         )
 
     def remove_cache_control_flag_from_messages_and_tools(
@@ -87,7 +95,7 @@ class OpenrouterConfig(OpenAIGPTConfig):
         """
         Move cache_control from message level to content blocks.
         OpenRouter requires cache_control to be inside content blocks, not at message level.
-        
+
         To avoid exceeding Anthropic's limit of 4 cache breakpoints, cache_control is only
         added to the LAST content block in each message.
         """
@@ -95,10 +103,10 @@ class OpenrouterConfig(OpenAIGPTConfig):
         for message in messages:
             message_dict = dict(message)
             cache_control = message_dict.pop("cache_control", None)
-            
+
             if cache_control is not None:
                 content = message_dict.get("content")
-                
+
                 if isinstance(content, list):
                     # Content is already a list, add cache_control only to the last block
                     if len(content) > 0:
@@ -119,10 +127,10 @@ class OpenrouterConfig(OpenAIGPTConfig):
                             "cache_control": cache_control,
                         }
                     ]
-            
+
             # Cast back to AllMessageValues after modification
             transformed_messages.append(cast(AllMessageValues, message_dict))
-        
+
         return transformed_messages
 
     def transform_request(
@@ -141,7 +149,7 @@ class OpenrouterConfig(OpenAIGPTConfig):
         """
         if self._supports_cache_control_in_content(model):
             messages = self._move_cache_control_to_content(messages)
-        
+
         extra_body = optional_params.pop("extra_body", {})
         response = super().transform_request(
             model, messages, optional_params, litellm_params, headers
@@ -204,7 +212,9 @@ class OpenrouterConfig(OpenAIGPTConfig):
                         model_response._hidden_params = {}
                     if "additional_headers" not in model_response._hidden_params:
                         model_response._hidden_params["additional_headers"] = {}
-                    model_response._hidden_params["additional_headers"]["llm_provider-x-litellm-response-cost"] = float(response_cost)
+                    model_response._hidden_params["additional_headers"][
+                        "llm_provider-x-litellm-response-cost"
+                    ] = float(response_cost)
         except Exception:
             # If we can't extract cost, continue without it - don't fail the response
             pass
