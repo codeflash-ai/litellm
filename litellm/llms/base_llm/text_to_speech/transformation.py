@@ -24,10 +24,11 @@ else:
 class TextToSpeechRequestData(TypedDict, total=False):
     """
     Structured return type for text-to-speech transformations.
-    
+
     This ensures a consistent interface across all TTS providers.
     Providers should set ONE of: dict_body, ssml_body, or text_body.
     """
+
     dict_body: Dict[str, Any]  # JSON request body (e.g., OpenAI TTS)
     ssml_body: str  # SSML/XML string body (e.g., Azure AVA TTS)
     headers: Dict[str, str]  # Provider-specific headers to merge with base headers
@@ -39,20 +40,18 @@ class BaseTextToSpeechConfig(ABC):
 
     @classmethod
     def get_config(cls):
+        func_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
+        cls_dict = cls.__dict__
         return {
             k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not k.startswith("_abc")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
+            for k, v in cls_dict.items()
+            if not k.startswith(("__", "_abc"))
+            and not isinstance(v, func_types)
             and v is not None
         }
 
@@ -114,7 +113,7 @@ class BaseTextToSpeechConfig(ABC):
     ) -> TextToSpeechRequestData:
         """
         Transform request to provider-specific format.
-        
+
         Returns:
             TextToSpeechRequestData: A structured dict containing:
                 - body: The request body (JSON dict, XML string, or binary data)
@@ -144,4 +143,3 @@ class BaseTextToSpeechConfig(ABC):
             message=error_message,
             headers=headers,
         )
-
