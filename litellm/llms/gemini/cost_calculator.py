@@ -5,6 +5,7 @@ Handles the context caching for Gemini API.
 """
 
 from typing import TYPE_CHECKING, Tuple
+from litellm.types.utils import PromptTokensDetailsWrapper
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelInfo, Usage
@@ -18,22 +19,16 @@ def cost_per_token(model: str, usage: "Usage") -> Tuple[float, float]:
     """
     from litellm.litellm_core_utils.llm_cost_calc.utils import generic_cost_per_token
 
-    return generic_cost_per_token(
-        model=model, usage=usage, custom_llm_provider="gemini"
-    )
+    return generic_cost_per_token(model=model, usage=usage, custom_llm_provider="gemini")
 
 
 def cost_per_web_search_request(usage: "Usage", model_info: "ModelInfo") -> float:
     """
     Calculates the cost per web search request for a given model, prompt tokens, and completion tokens.
     """
-    from litellm.types.utils import PromptTokensDetailsWrapper
-
     # cost per web search request
     cost_per_web_search_request = 35e-3
 
-    number_of_web_search_requests = 0
-    # Get number of web search requests
     if (
         usage is not None
         and usage.prompt_tokens_details is not None
@@ -46,6 +41,4 @@ def cost_per_web_search_request(usage: "Usage", model_info: "ModelInfo") -> floa
         number_of_web_search_requests = 0
 
     # Calculate total cost
-    total_cost = cost_per_web_search_request * number_of_web_search_requests
-
-    return total_cost
+    return cost_per_web_search_request * number_of_web_search_requests
