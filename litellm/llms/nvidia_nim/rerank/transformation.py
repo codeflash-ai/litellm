@@ -273,43 +273,41 @@ class NvidiaNimRerankConfig(BaseRerankConfig):
             )
 
         # Parse as NvidiaNimRerankResponse
-        nvidia_response: NvidiaNimRerankResponse = raw_response_json
-        
-        # Transform Nvidia NIM response to LiteLLM format
-        results: List[RerankResponseResult] = []
+        nvidia_response = raw_response_json
+
+        # Pre-fetch all needed for performance
         rankings = nvidia_response.get("rankings", [])
-        
-        # Get original documents from request if we need to include them
-        original_passages: List[NvidiaNimPassageObject] = request_data.get("passages", [])
-        
+        original_passages = request_data.get("passages", [])
+        len_passages = len(original_passages)
+
+        # Use fast append and avoid attribute lookups in loop
+        results: List[RerankResponseResult] = []
+        append_result = results.append
+
+        # Avoid function overhead in tight loop for minimal gain
         for ranking in rankings:
+            index = ranking["index"]
             result_item: RerankResponseResult = {
-                "index": ranking["index"],
+                "index": index,
                 "relevance_score": ranking["logit"],
             }
-            
-            # Include document if it was in the original request
-            index: int = ranking["index"]
-            if index < len(original_passages):
+            if index < len_passages:
                 result_item["document"] = {"text": original_passages[index]["text"]}  # type: ignore
-            
-            results.append(result_item)
-        
+            append_result(result_item)
+
         # Construct metadata with billed_units
-        # Nvidia NIM uses "usage" field with "total_tokens"
-        usage = raw_response_json.get("usage", {})
+        usage = nvidia_response.get("usage", {})
         total_tokens = usage.get("total_tokens", 0)
-        
         billed_units: RerankBilledUnits = {
             "total_tokens": total_tokens if total_tokens > 0 else len(results)
         }
-        
         meta: RerankResponseMeta = {
             "billed_units": billed_units
         }
-        
+
+        # Use id from response if available, else generate as before
         return RerankResponse(
-            id=raw_response_json.get("id") or str(uuid.uuid4()),
+            id=nvidia_response.get("id") or str(uuid.uuid4()),
             results=results,
             meta=meta,
         )
