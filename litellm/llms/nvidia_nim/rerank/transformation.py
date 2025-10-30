@@ -123,8 +123,9 @@ class NvidiaNimRerankConfig(BaseRerankConfig):
         
         # Pass through Nvidia-specific params from non_default_params
         if non_default_params:
-            optional_nvidia_nim_rerank_params.update(non_default_params)
-        return dict(optional_nvidia_nim_rerank_params)
+            optional_nvidia_nim_rerank_params = {**optional_nvidia_nim_rerank_params, **non_default_params}
+        
+        return optional_nvidia_nim_rerank_params
 
     def validate_environment(
         self,
