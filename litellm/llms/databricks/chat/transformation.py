@@ -172,9 +172,9 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         # Build DatabricksFunction explicitly to avoid parameter conflicts
         function_params: DatabricksFunction = {
             "name": tool["name"],
-            "parameters": cast(dict, tool.get("input_schema") or {})
+            "parameters": cast(dict, tool.get("input_schema") or {}),
         }
-        
+
         # Only add description if it exists
         description = tool.get("description")
         if description is not None:
@@ -362,30 +362,33 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         """
         if content is None:
             return None, None
-        thinking_blocks: Optional[
-            List[
-                Union[ChatCompletionThinkingBlock, ChatCompletionRedactedThinkingBlock]
-            ]
-        ] = None
-        reasoning_content: Optional[str] = None
-        if isinstance(content, list):
-            for item in content:
-                if item.get("type") == "reasoning":
-                    summary_list = item.get("summary", [])
-                    if isinstance(summary_list, list):
-                        for sum in summary_list:
-                            if reasoning_content is None:
-                                reasoning_content = ""
-                            reasoning_content += sum["text"]
-                            thinking_block = ChatCompletionThinkingBlock(
-                                type="thinking",
-                                thinking=sum.get("text", ""),
-                                signature=sum.get("signature", ""),
-                            )
-                            if thinking_blocks is None:
-                                thinking_blocks = []
-                            thinking_blocks.append(thinking_block)
-        return reasoning_content, thinking_blocks
+
+        if not isinstance(content, list):
+            return None, None
+
+        reasoning_content_parts: List[str] = []
+        thinking_blocks: List[
+            Union[ChatCompletionThinkingBlock, ChatCompletionRedactedThinkingBlock]
+        ] = []
+
+        for item in content:
+            if item.get("type") == "reasoning":
+                summary_list = item.get("summary", [])
+                if isinstance(summary_list, list):
+                    for sum in summary_list:
+                        text = sum["text"]
+                        reasoning_content_parts.append(text)
+                        thinking_block = ChatCompletionThinkingBlock(
+                            type="thinking",
+                            thinking=text,
+                            signature=sum.get("signature", ""),
+                        )
+                        thinking_blocks.append(thinking_block)
+
+        reasoning_content = (
+            "".join(reasoning_content_parts) if reasoning_content_parts else None
+        )
+        return reasoning_content, thinking_blocks if thinking_blocks else None
 
     @staticmethod
     def extract_citations(
