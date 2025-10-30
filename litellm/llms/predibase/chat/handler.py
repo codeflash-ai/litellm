@@ -66,18 +66,19 @@ class PredibaseChatCompletion:
 
         Initial issue that prompted this - https://github.com/BerriAI/litellm/issues/763
         """
-        chat_template_tokens = [
+        chat_template_tokens = (
             "<|assistant|>",
             "<|system|>",
             "<|user|>",
             "<s>",
             "</s>",
-        ]
+        )
+        generated_text = generated_text.strip()
         for token in chat_template_tokens:
-            if generated_text.strip().startswith(token):
-                generated_text = generated_text.replace(token, "", 1)
+            if generated_text.startswith(token):
+                generated_text = generated_text[len(token) :]
             if generated_text.endswith(token):
-                generated_text = generated_text[::-1].replace(token[::-1], "", 1)[::-1]
+                generated_text = generated_text[: -len(token)]
         return generated_text
 
     def process_response(  # noqa: PLR0915
