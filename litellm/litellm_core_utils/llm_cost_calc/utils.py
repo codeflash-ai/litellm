@@ -18,9 +18,7 @@ from litellm.utils import get_model_info
 
 
 def _is_above_128k(tokens: float) -> bool:
-    if tokens > 128000:
-        return True
-    return False
+    return tokens > 128000
 
 
 def select_cost_metric_for_model(

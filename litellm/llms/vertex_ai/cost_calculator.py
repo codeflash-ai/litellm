@@ -190,9 +190,6 @@ def _handle_128k_pricing(
     input_cost_per_token_above_128k_tokens = model_info.get(
         "input_cost_per_token_above_128k_tokens"
     )
-    output_cost_per_token_above_128k_tokens = model_info.get(
-        "output_cost_per_token_above_128k_tokens"
-    )
 
     prompt_tokens = usage.prompt_tokens
     completion_tokens = usage.completion_tokens
