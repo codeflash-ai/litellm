@@ -20,9 +20,14 @@ else:
 class VectorStoreRegistry:
     def __init__(self, vector_stores: List[LiteLLM_ManagedVectorStore] = []):
         self.vector_stores: List[LiteLLM_ManagedVectorStore] = vector_stores
+        # Precompute mapping from vector_store_id to vector store object for O(1) lookups
         self.vector_store_ids_to_vector_store_map: Dict[
             str, LiteLLM_ManagedVectorStore
-        ] = {}
+        ] = {
+            vs.get("vector_store_id"): vs
+            for vs in vector_stores
+            if "vector_store_id" in vs
+        }
 
     def get_vector_store_ids_to_run(
         self, non_default_params: Dict, tools: Optional[List[Dict]] = None
@@ -150,11 +155,14 @@ class VectorStoreRegistry:
         vector_store_ids = self.pop_vector_store_ids_to_run(
             non_default_params=non_default_params, tools=tools
         )
+        # Use precomputed dictionary for O(1) lookups
         vector_stores_to_run: List[LiteLLM_ManagedVectorStore] = []
         for vector_store_id in vector_store_ids:
-            for vector_store in self.vector_stores:
-                if vector_store.get("vector_store_id") == vector_store_id:
-                    vector_stores_to_run.append(vector_store)
+            vector_store = self.vector_store_ids_to_vector_store_map.get(
+                vector_store_id
+            )
+            if vector_store is not None:
+                vector_stores_to_run.append(vector_store)
         return vector_stores_to_run
 
     def _get_vector_store_ids_from_tool_calls(
