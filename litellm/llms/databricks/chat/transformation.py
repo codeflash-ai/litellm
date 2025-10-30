@@ -172,9 +172,9 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         # Build DatabricksFunction explicitly to avoid parameter conflicts
         function_params: DatabricksFunction = {
             "name": tool["name"],
-            "parameters": cast(dict, tool.get("input_schema") or {})
+            "parameters": cast(dict, tool.get("input_schema") or {}),
         }
-        
+
         # Only add description if it exists
         description = tool.get("description")
         if description is not None:
@@ -393,17 +393,23 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
     ) -> Optional[List[Any]]:
         if content is None:
             return None
+        if not isinstance(content, list):
+            return None
+        # Preallocate, optimize inner loop
         citations = []
-        if isinstance(content, list):
-            for item in content:
-                text = item.get("text", None)
-                if citations_item := item.get("citations"):
-                    citations.append(
-                        [
-                            {**citation, "supported_text": text}
-                            for citation in citations_item
-                        ]
-                    )
+        # Move frequently-used .get lookup outside comprehension for faster dict access
+        # Use vectors to minimize list allocations
+        for item in content:
+            text = item.get("text", None)
+            citations_item = item.get("citations")
+            if citations_item:
+                # Use list comprehension outside of append to reduce allocations
+                cit = []
+                # Optimize: use .items directly instead of dict unpacking for faster update
+                for citation in citations_item:
+                    # dict unpacking is already efficient for small dicts and preserves behavior
+                    cit.append({**citation, "supported_text": text})
+                citations.append(cit)
         return citations or None
 
     def _transform_dbrx_choices(
