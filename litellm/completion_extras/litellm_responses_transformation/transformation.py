@@ -65,8 +65,8 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
         Returns:
             Tuple of (Choice object or None, updated index)
         """
-        from litellm.types.utils import Choices, Message
-
+        # Move import out of hot path for performance
+        # These are only used when constructing Choice, so import only if needed
         item_type = item.get("type")
 
         # Ignore reasoning items for now
@@ -76,17 +76,24 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
         # Handle message items with output_text content
         if item_type == "message":
             content_list = item.get("content", [])
+            # Typical content_list is small, but content_list can be list of anything
+            # To avoid unnecessary repeated checks and attribute lookups in the loop,
+            # process only dicts with appropriate content_type, in single pass
             for content_item in content_list:
-                if isinstance(content_item, dict):
-                    content_type = content_item.get("type")
-                    if content_type == "output_text":
-                        response_text = content_item.get("text", "")
-                        msg = Message(
-                            role=item.get("role", "assistant"),
-                            content=response_text if response_text else "",
-                        )
-                        choice = Choices(message=msg, finish_reason="stop", index=index)
-                        return choice, index + 1
+                # Fast path: dict and 'type' == 'output_text'
+                if (
+                    isinstance(content_item, dict)
+                    and content_item.get("type") == "output_text"
+                ):
+                    response_text = content_item.get("text", "")
+                    # Only import and construct Message and Choices if we have an output_text
+                    from litellm.types.utils import Choices, Message
+                    msg = Message(
+                        role=item.get("role", "assistant"),
+                        content=response_text if response_text else "",
+                    )
+                    choice = Choices(message=msg, finish_reason="stop", index=index)
+                    return choice, index + 1
 
         # Unknown or unsupported type
         return None, index
@@ -187,10 +194,10 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                 responses_api_request["max_output_tokens"] = value
             elif key == "tools" and value is not None:
                 # Convert chat completion tools to responses API tools format
-                responses_api_request["tools"] = (
-                    self._convert_tools_to_responses_format(
-                        cast(List[Dict[str, Any]], value)
-                    )
+                responses_api_request[
+                    "tools"
+                ] = self._convert_tools_to_responses_format(
+                    cast(List[Dict[str, Any]], value)
                 )
             elif key in ResponsesAPIOptionalRequestParams.__annotations__.keys():
                 responses_api_request[key] = value  # type: ignore
@@ -289,9 +296,7 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
         reasoning_content: Optional[str] = None
 
         for item in raw_response.output:
-
             if isinstance(item, ResponseReasoningItem):
-
                 for summary_item in item.summary:
                     response_text = getattr(summary_item, "text", "")
                     reasoning_content = response_text if response_text else ""
