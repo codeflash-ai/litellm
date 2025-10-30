@@ -80,37 +80,33 @@ class CustomGuardrail(CustomLogger):
         ],
         supported_event_hooks: List[GuardrailEventHooks],
     ) -> None:
-
-        def _validate_event_hook_list_is_in_supported_event_hooks(
-            event_hook: Union[List[GuardrailEventHooks], List[str]],
-            supported_event_hooks: List[GuardrailEventHooks],
-        ) -> None:
-            for hook in event_hook:
-                if isinstance(hook, str):
-                    hook = GuardrailEventHooks(hook)
-                if hook not in supported_event_hooks:
-                    raise ValueError(
-                        f"Event hook {hook} is not in the supported event hooks {supported_event_hooks}"
-                    )
-
         if event_hook is None:
             return
+        # Avoid repeated set construction for membership checks
+        supported_hooks_set = set(supported_event_hooks)
         if isinstance(event_hook, str):
-            event_hook = GuardrailEventHooks(event_hook)
-        if isinstance(event_hook, list):
-            _validate_event_hook_list_is_in_supported_event_hooks(
+            event_hook_obj = GuardrailEventHooks(event_hook)
+            if event_hook_obj not in supported_hooks_set:
+                raise ValueError(
+                    f"Event hook {event_hook_obj} is not in the supported event hooks {supported_event_hooks}"
+                )
+        elif isinstance(event_hook, list):
+            # Use staticmethod for efficient membership check
+            CustomGuardrail._validate_event_hook_list_is_in_supported_event_hooks(
                 event_hook, supported_event_hooks
             )
         elif isinstance(event_hook, Mode):
-            _validate_event_hook_list_is_in_supported_event_hooks(
-                list(event_hook.tags.values()), supported_event_hooks
+            # Convert tags.values() to list once and validate efficiently
+            tags_values = list(event_hook.tags.values())
+            CustomGuardrail._validate_event_hook_list_is_in_supported_event_hooks(
+                tags_values, supported_event_hooks
             )
             if event_hook.default:
-                _validate_event_hook_list_is_in_supported_event_hooks(
+                CustomGuardrail._validate_event_hook_list_is_in_supported_event_hooks(
                     [event_hook.default], supported_event_hooks
                 )
         elif isinstance(event_hook, GuardrailEventHooks):
-            if event_hook not in supported_event_hooks:
+            if event_hook not in supported_hooks_set:
                 raise ValueError(
                     f"Event hook {event_hook} is not in the supported event hooks {supported_event_hooks}"
                 )
@@ -532,6 +528,26 @@ class CustomGuardrail(CustomLogger):
             )
             return cast(List[AllMessageValues], messages)
         return None
+
+    @staticmethod
+    def _validate_event_hook_list_is_in_supported_event_hooks(
+        event_hook: Union[List[GuardrailEventHooks], List[str]],
+        supported_event_hooks: List[GuardrailEventHooks],
+    ) -> None:
+        """
+        Checks if each hook in event_hook is in supported_event_hooks.
+        This method is static because it doesn't use instance state.
+        """
+        # Optimize membership checks with a set for supported_event_hooks
+        supported_hooks_set = set(supported_event_hooks)
+        for hook in event_hook:
+            orig_hook = hook
+            if isinstance(hook, str):
+                hook = GuardrailEventHooks(hook)
+            if hook not in supported_hooks_set:
+                raise ValueError(
+                    f"Event hook {orig_hook} is not in the supported event hooks {supported_event_hooks}"
+                )
 
 
 def log_guardrail_information(func):
