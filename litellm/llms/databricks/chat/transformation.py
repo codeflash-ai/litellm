@@ -172,9 +172,9 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         # Build DatabricksFunction explicitly to avoid parameter conflicts
         function_params: DatabricksFunction = {
             "name": tool["name"],
-            "parameters": cast(dict, tool.get("input_schema") or {})
+            "parameters": cast(dict, tool.get("input_schema") or {}),
         }
-        
+
         # Only add description if it exists
         description = tool.get("description")
         if description is not None:
@@ -337,12 +337,14 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         if isinstance(content, str):
             return content
         elif isinstance(content, list):
-            content_str = ""
+            # Preallocate the parts in a list for more efficient string concatenation
+            parts: List[str] = []
             for item in content:
                 if item.get("type") == "text":
                     text_value = item.get("text", "")
-                    content_str += str(text_value) if text_value is not None else ""
-            return content_str
+                    if text_value is not None:
+                        parts.append(str(text_value))
+            return "".join(parts)
         else:
             raise Exception(f"Unsupported content type: {type(content)}")
 
