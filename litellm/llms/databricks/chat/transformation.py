@@ -87,10 +87,19 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         stop: Optional[Union[List[str], str]] = None,
         n: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Avoid locals().copy(), use direct assignments for efficiency
+        if max_tokens is not None:
+            setattr(self.__class__, "max_tokens", max_tokens)
+        if temperature is not None:
+            setattr(self.__class__, "temperature", temperature)
+        if top_p is not None:
+            setattr(self.__class__, "top_p", top_p)
+        if top_k is not None:
+            setattr(self.__class__, "top_k", top_k)
+        if stop is not None:
+            setattr(self.__class__, "stop", stop)
+        if n is not None:
+            setattr(self.__class__, "n", n)
 
     @classmethod
     def get_config(cls):
@@ -172,9 +181,9 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         # Build DatabricksFunction explicitly to avoid parameter conflicts
         function_params: DatabricksFunction = {
             "name": tool["name"],
-            "parameters": cast(dict, tool.get("input_schema") or {})
+            "parameters": cast(dict, tool.get("input_schema") or {}),
         }
-        
+
         # Only add description if it exists
         description = tool.get("description")
         if description is not None:
@@ -283,10 +292,7 @@ class DatabricksConfig(DatabricksBase, OpenAILikeChatConfig, AnthropicConfig):
         """
         Databricks doesn't support 'response_format' while streaming
         """
-        if optional_params.get("response_format") is not None:
-            return True
-
-        return False
+        return optional_params.get("response_format") is not None
 
     @overload
     def _transform_messages(
