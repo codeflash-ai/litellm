@@ -11,15 +11,21 @@ from litellm.types.llms.openai import (
 
 
 def is_tokens_or_list_of_tokens(value: List):
-    # Check if it's a list of integers (tokens)
-    if isinstance(value, list) and all(isinstance(item, int) for item in value):
-        return True
-    # Check if it's a list of lists of integers (list of tokens)
-    if isinstance(value, list) and all(
-        isinstance(item, list) and all(isinstance(i, int) for i in item)
-        for item in value
-    ):
-        return True
+    # Check if it's a list of integers (tokens) or a list of lists of integers (list of tokens)
+    if not isinstance(value, list):
+        return False
+    if not value:
+        return False
+    first_item = value[0]
+    if isinstance(first_item, int):
+        # Assume homogeneous list, check all ints
+        return all(isinstance(item, int) for item in value)
+    elif isinstance(first_item, list):
+        # Assume homogeneous list of lists of ints
+        return all(
+            isinstance(item, list) and all(isinstance(i, int) for i in item)
+            for item in value
+        )
     return False
 
 
@@ -35,16 +41,12 @@ def _transform_prompt(
         ):
             openai_prompt: AllPromptValues = cast(AllPromptValues, message_content)
         else:
-            openai_prompt = ""
             content = convert_content_list_to_str(cast(AllMessageValues, messages[0]))
-            openai_prompt += content
+            openai_prompt = content
     else:
-        prompt_str_list: List[str] = []
-        for m in messages:
-            try:  # expect list of int/list of list of int to be a 1 message array only.
-                content = convert_content_list_to_str(cast(AllMessageValues, m))
-                prompt_str_list.append(content)
-            except Exception as e:
-                raise e
+        # Use list comprehension for efficiency
+        prompt_str_list: List[str] = [
+            convert_content_list_to_str(cast(AllMessageValues, m)) for m in messages
+        ]
         openai_prompt = prompt_str_list
     return openai_prompt
