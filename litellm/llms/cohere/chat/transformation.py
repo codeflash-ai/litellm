@@ -107,10 +107,27 @@ class CohereChatConfig(BaseConfig):
         tool_results: Optional[list] = None,
         seed: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Instead of copying and checking all locals, directly set non-None args only for instance attributes.
+        # This avoids unnecessary creation of dict and attribute setting on the class.
+        if preamble is not None: self.preamble = preamble
+        if chat_history is not None: self.chat_history = chat_history
+        if generation_id is not None: self.generation_id = generation_id
+        if response_id is not None: self.response_id = response_id
+        if conversation_id is not None: self.conversation_id = conversation_id
+        if prompt_truncation is not None: self.prompt_truncation = prompt_truncation
+        if connectors is not None: self.connectors = connectors
+        if search_queries_only is not None: self.search_queries_only = search_queries_only
+        if documents is not None: self.documents = documents
+        if temperature is not None: self.temperature = temperature
+        if max_tokens is not None: self.max_tokens = max_tokens
+        if max_completion_tokens is not None: self.max_completion_tokens = max_completion_tokens
+        if k is not None: self.k = k
+        if p is not None: self.p = p
+        if frequency_penalty is not None: self.frequency_penalty = frequency_penalty
+        if presence_penalty is not None: self.presence_penalty = presence_penalty
+        if tools is not None: self.tools = tools
+        if tool_results is not None: self.tool_results = tool_results
+        if seed is not None: self.seed = seed
 
     def validate_environment(
         self,
@@ -284,19 +301,15 @@ class CohereChatConfig(BaseConfig):
         self,
         tools: Optional[list] = None,
     ):
+        # Use a list comprehension for faster list creation
         if tools is None:
             tools = []
-        cohere_tools = []
-        for tool in tools:
-            cohere_tool = self._translate_openai_tool_to_cohere(tool)
-            cohere_tools.append(cohere_tool)
-        return cohere_tools
+        return [self._translate_openai_tool_to_cohere(tool) for tool in tools]
 
     def _translate_openai_tool_to_cohere(
         self,
         openai_tool: dict,
     ):
-        # cohere tools look like this
         """
         {
         "name": "query_daily_sales_report",
@@ -310,48 +323,23 @@ class CohereChatConfig(BaseConfig):
         }
         }
         """
-
-        # OpenAI tools look like this
-        """
-        {
-            "type": "function",
-            "function": {
-                "name": "get_current_weather",
-                "description": "Get the current weather in a given location",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The city and state, e.g. San Francisco, CA",
-                        },
-                        "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
-                    },
-                    "required": ["location"],
-                },
-            },
-        }
-        """
         cohere_tool = {
             "name": openai_tool["function"]["name"],
             "description": openai_tool["function"]["description"],
             "parameter_definitions": {},
         }
+        function_section = openai_tool["function"]
+        properties = function_section["parameters"]["properties"]
+        required_params = function_section["parameters"].get("required", [])
 
-        for param_name, param_def in openai_tool["function"]["parameters"][
-            "properties"
-        ].items():
-            required_params = (
-                openai_tool.get("function", {})
-                .get("parameters", {})
-                .get("required", [])
-            )
-            cohere_param_def = {
+        pd = cohere_tool["parameter_definitions"]
+        # Use local variable only, avoid repeated dict lookups
+        for param_name, param_def in properties.items():
+            pd[param_name] = {
                 "description": param_def.get("description", ""),
                 "type": param_def.get("type", ""),
                 "required": param_name in required_params,
             }
-            cohere_tool["parameter_definitions"][param_name] = cohere_param_def
 
         return cohere_tool
 
