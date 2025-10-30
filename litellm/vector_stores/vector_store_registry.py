@@ -79,17 +79,19 @@ class VectorStoreRegistry:
             The vector store ids that were popped
         """
         if tools:
+            # Precompute recognised vector_store_ids for lookup speedup
+            recognised_ids = {
+                vs.get("vector_store_id")
+                for vs in self.vector_stores
+                if "vector_store_id" in vs
+            }
             tools_to_remove: List[int] = []
             for i, tool in enumerate(tools):
                 tool_vector_store_ids: List[str] = tool.get("vector_store_ids", [])
                 if len(tool_vector_store_ids) == 0:
                     continue
-                # remove the tool if all vector_store_ids are recognised in the registry
-                recognised = all(
-                    any(vs.get("vector_store_id") == vs_id for vs in self.vector_stores)
-                    for vs_id in tool_vector_store_ids
-                )
-                if recognised:
+                # use set.issubset for efficient recognition
+                if set(tool_vector_store_ids).issubset(recognised_ids):
                     tools_to_remove.append(i)
                     vector_store_ids.extend(tool_vector_store_ids)
 
