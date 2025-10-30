@@ -69,16 +69,20 @@ class AWSKeyManagementService_V2:
             )
 
     def load_aws_kms(self, use_aws_kms: Optional[bool]):
-        if use_aws_kms is None or use_aws_kms is False:
+        if not use_aws_kms:
             return
         try:
             import boto3
 
-            validate_environment()
+            # Avoid duplicate lookup for region name
+            region_name = os.environ.get("AWS_REGION_NAME")
+            if region_name is None:
+                raise ValueError(
+                    "Missing required environment variable - AWS_REGION_NAME"
+                )
 
-            # Create a Secrets Manager client
-            kms_client = boto3.client("kms", region_name=os.getenv("AWS_REGION_NAME"))
-
+            # Create a KMS client using the region name
+            kms_client = boto3.client("kms", region_name=region_name)
             return kms_client
         except Exception as e:
             raise e
