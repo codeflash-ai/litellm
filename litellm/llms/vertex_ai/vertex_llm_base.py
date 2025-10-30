@@ -21,6 +21,7 @@ from .common_utils import (
     all_gemini_url_modes,
     is_global_only_vertex_model,
 )
+import google.oauth2.service_account
 
 if TYPE_CHECKING:
     from google.auth.credentials import Credentials as GoogleCredentialsObject
@@ -148,11 +149,9 @@ class VertexBase:
         )
 
     def _credentials_from_service_account(self, json_obj, scopes):
-        import google.oauth2.service_account
-
-        return google.oauth2.service_account.Credentials.from_service_account_info(
-            json_obj, scopes=scopes
-        )
+        # Move import to module-level for better performance
+        # (avoids import overhead each call)
+        return _service_account_creds(json_obj, scopes)
 
     def _credentials_from_default_auth(self, scopes):
         import google.auth as google_auth
@@ -624,3 +623,9 @@ class VertexBase:
             or get_secret_str("VERTEXAI_LOCATION")
             or get_secret_str("VERTEX_LOCATION")
         )
+
+
+def _service_account_creds(json_obj, scopes):
+    return google.oauth2.service_account.Credentials.from_service_account_info(
+        json_obj, scopes=scopes
+    )
