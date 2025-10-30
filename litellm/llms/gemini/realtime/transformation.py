@@ -186,10 +186,10 @@ class GeminiRealtimeConfig(BaseRealtimeConfig):
                 )
 
                 vertex_gemini_config = VertexGeminiConfig()
-                optional_params["generationConfig"]["tools"] = (
-                    vertex_gemini_config._map_function(
-                        value=value, optional_params=optional_params
-                    )
+                optional_params["generationConfig"][
+                    "tools"
+                ] = vertex_gemini_config._map_function(
+                    value=value, optional_params=optional_params
                 )
             elif key == "input_audio_transcription" and value is not None:
                 optional_params["inputAudioTranscription"] = {}
@@ -201,10 +201,10 @@ class GeminiRealtimeConfig(BaseRealtimeConfig):
                 if (
                     len(transformed_audio_activity_config) > 0
                 ):  # if the config is not empty, add it to the optional params
-                    optional_params["realtimeInputConfig"] = (
-                        BidiGenerateContentRealtimeInputConfig(
-                            automaticActivityDetection=transformed_audio_activity_config
-                        )
+                    optional_params[
+                        "realtimeInputConfig"
+                    ] = BidiGenerateContentRealtimeInputConfig(
+                        automaticActivityDetection=transformed_audio_activity_config
                     )
         if len(optional_params["generationConfig"]) == 0:
             optional_params.pop("generationConfig")
@@ -573,22 +573,15 @@ class GeminiRealtimeConfig(BaseRealtimeConfig):
     ) -> Optional[List[OpenAIRealtimeResponseDelta]]:
         try:
             if isinstance(transformed_message, list):
-                current_delta_chunks = []
-                any_delta_chunk = False
-                for event in transformed_message:
-                    if event["type"] == "response.text.delta":
-                        current_delta_chunks.append(
-                            cast(OpenAIRealtimeResponseDelta, event)
-                        )
-                        any_delta_chunk = True
-                if not any_delta_chunk:
-                    current_delta_chunks = (
-                        None  # reset current_delta_chunks if no delta chunks
-                    )
+                # Use list comprehensions for fast filtering and accumulation
+                delta_chunks = [
+                    cast(OpenAIRealtimeResponseDelta, event)
+                    for event in transformed_message
+                    if event["type"] == "response.text.delta"
+                ]
+                current_delta_chunks = delta_chunks if delta_chunks else None
             else:
-                if (
-                    transformed_message["type"] == "response.text.delta"
-                ):  # ONLY ACCUMULATE TEXT DELTA CHUNKS - AUDIO WILL CAUSE SERVER MEMORY ISSUES
+                if transformed_message["type"] == "response.text.delta":
                     if current_delta_chunks is None:
                         current_delta_chunks = []
                     current_delta_chunks.append(
@@ -838,9 +831,9 @@ class GeminiRealtimeConfig(BaseRealtimeConfig):
             "session_configuration_request"
         ]
         current_item_chunks = realtime_response_transform_input["current_item_chunks"]
-        current_delta_type: Optional[ALL_DELTA_TYPES] = (
-            realtime_response_transform_input["current_delta_type"]
-        )
+        current_delta_type: Optional[
+            ALL_DELTA_TYPES
+        ] = realtime_response_transform_input["current_delta_type"]
         returned_message: List[OpenAIRealtimeEvents] = []
 
         for key, value in json_message.items():
