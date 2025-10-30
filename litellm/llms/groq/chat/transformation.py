@@ -52,10 +52,21 @@ class GroqChatConfig(OpenAILikeChatConfig):
         tools: Optional[list] = None,
         tool_choice: Optional[Union[str, dict]] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Direct attribute assignment on the instance is more efficient than setattr in a loop on __class__
+        # This avoids unintended side-effects and meets the per-instance semantics.
+        self.frequency_penalty = frequency_penalty
+        self.function_call = function_call
+        self.functions = functions
+        self.logit_bias = logit_bias
+        self.max_tokens = max_tokens
+        self.n = n
+        self.presence_penalty = presence_penalty
+        self.stop = stop
+        self.temperature = temperature
+        self.top_p = top_p
+        self.response_format = response_format
+        self.tools = tools
+        self.tool_choice = tool_choice
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -141,10 +152,7 @@ class GroqChatConfig(OpenAILikeChatConfig):
         """
         Groq doesn't support 'response_format' while streaming
         """
-        if optional_params.get("response_format") is not None:
-            return True
-
-        return False
+        return optional_params.get("response_format") is not None
 
     def _create_json_tool_call_for_response_format(
         self,
@@ -209,7 +217,6 @@ class GroqChatConfig(OpenAILikeChatConfig):
         )
 
         return optional_params
-    
 
     def transform_response(
         self,
@@ -239,12 +246,17 @@ class GroqChatConfig(OpenAILikeChatConfig):
             json_mode=json_mode,
         )
 
-        mapped_service_tier: Literal["auto", "default", "flex"] = self._map_groq_service_tier(original_service_tier=getattr(model_response, "service_tier"))
+        mapped_service_tier: Literal[
+            "auto", "default", "flex"
+        ] = self._map_groq_service_tier(
+            original_service_tier=getattr(model_response, "service_tier")
+        )
         setattr(model_response, "service_tier", mapped_service_tier)
         return model_response
-    
 
-    def _map_groq_service_tier(self, original_service_tier: Optional[str]) -> Literal["auto", "default", "flex"]:
+    def _map_groq_service_tier(
+        self, original_service_tier: Optional[str]
+    ) -> Literal["auto", "default", "flex"]:
         """
         Ensure groq service tier is OpenAI compatible.
         """
@@ -252,5 +264,5 @@ class GroqChatConfig(OpenAILikeChatConfig):
             return "auto"
         if original_service_tier not in ["auto", "default", "flex"]:
             return "auto"
-        
+
         return cast(Literal["auto", "default", "flex"], original_service_tier)
