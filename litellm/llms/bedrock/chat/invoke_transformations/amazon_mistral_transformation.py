@@ -37,10 +37,17 @@ class AmazonMistralConfig(AmazonInvokeConfig, BaseConfig):
         top_k: Optional[float] = None,
         stop: Optional[List[str]] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Directly assign to instance attributes rather than class attributes
+        if max_tokens is not None:
+            self.max_tokens = max_tokens
+        if temperature is not None:
+            self.temperature = temperature
+        if top_p is not None:
+            self.top_p = top_p
+        if top_k is not None:
+            self.top_k = top_k
+        if stop is not None:
+            self.stop = stop
 
         AmazonInvokeConfig.__init__(self)
 
@@ -73,17 +80,10 @@ class AmazonMistralConfig(AmazonInvokeConfig, BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
+        # Use more efficient dict membership checks
         for k, v in non_default_params.items():
-            if k == "max_tokens":
-                optional_params["max_tokens"] = v
-            if k == "temperature":
-                optional_params["temperature"] = v
-            if k == "top_p":
-                optional_params["top_p"] = v
-            if k == "stop":
-                optional_params["stop"] = v
-            if k == "stream":
-                optional_params["stream"] = v
+            if k in {"max_tokens", "temperature", "top_p", "stop", "stream"}:
+                optional_params[k] = v
         return optional_params
 
     @staticmethod
