@@ -45,16 +45,17 @@ class RecraftImageGenerationConfig(BaseImageGenerationConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
-        supported_params = self.get_supported_openai_params(model)
-        for k in non_default_params.keys():
-            if k not in optional_params.keys():
+        supported_params = set(self.get_supported_openai_params(model))
+        optional_param_keys = optional_params.keys()
+        for k in non_default_params:
+            if k not in optional_param_keys:
                 if k in supported_params:
                     optional_params[k] = non_default_params[k]
                 elif drop_params:
-                    pass
+                    continue
                 else:
                     raise ValueError(
-                        f"Parameter {k} is not supported for model {model}. Supported parameters are {supported_params}. Set drop_params=True to drop unsupported parameters."
+                        f"Parameter {k} is not supported for model {model}. Supported parameters are {sorted(supported_params)}. Set drop_params=True to drop unsupported parameters."
                     )
 
         return optional_params
