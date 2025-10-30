@@ -1,4 +1,7 @@
 from typing import TYPE_CHECKING, List, Optional
+from litellm.litellm_core_utils.prompt_templates.common_utils import (
+    convert_content_list_to_str,
+)
 
 if TYPE_CHECKING:
     from litellm.types.llms.openai import AllMessageValues
@@ -21,32 +24,24 @@ class OpenAIGuardrailBase:
         ]
         get_user_prompt(messages) -> "What is the weather in Tokyo?"
         """
-        from litellm.litellm_core_utils.prompt_templates.common_utils import (
-            convert_content_list_to_str,
-        )
 
         if not messages:
             return None
 
-        # Iterate from the end to find the last consecutive block of user messages
-        user_messages = []
-        for message in reversed(messages):
-            if message.get("role") == "user":
-                user_messages.append(message)
+        # Find the last consecutive block of user messages from the end
+        end = len(messages)
+        start = end
+        for i in range(end - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                start = i
             else:
-                # Stop when we hit a non-user message
                 break
 
-        if not user_messages:
+        if start == end:
             return None
 
-        # Reverse to get the messages in chronological order
-        user_messages.reverse()
-
-        user_prompt = ""
-        for message in user_messages:
-            text_content = convert_content_list_to_str(message)
-            user_prompt += text_content + "\n"
-
-        result = user_prompt.strip()
-        return result if result else None 
+        user_messages = messages[start:end]
+        # Accumulate prompt lines efficiently
+        lines = [convert_content_list_to_str(msg) for msg in user_messages]
+        result = "\n".join(lines).strip()
+        return result if result else None
