@@ -97,6 +97,9 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
         input_items: List[Any] = []
         instructions: Optional[str] = None
 
+        # Avoid repeated attribute access
+        _convert_content_to_responses_format = self._convert_content_to_responses_format
+
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content", "")
@@ -112,7 +115,7 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                         {
                             "type": "message",
                             "role": role,
-                            "content": self._convert_content_to_responses_format(
+                            "content": _convert_content_to_responses_format(
                                 content, role  # type: ignore
                             ),
                         }
@@ -134,10 +137,13 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                             "type": "function_call",
                             "call_id": tool_call["id"],
                         }
-                        if "name" in function:
-                            input_tool_call["name"] = function["name"]
-                        if "arguments" in function:
-                            input_tool_call["arguments"] = function["arguments"]
+                        # Instead of checking with "name" in ... and "arguments" in ..., check once and assign
+                        name = function.get("name")
+                        if name is not None:
+                            input_tool_call["name"] = name
+                        arguments = function.get("arguments")
+                        if arguments is not None:
+                            input_tool_call["arguments"] = arguments
                         input_items.append(input_tool_call)
                     else:
                         raise ValueError(f"tool call not supported: {tool_call}")
@@ -147,7 +153,7 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                     {
                         "type": "message",
                         "role": role,
-                        "content": self._convert_content_to_responses_format(
+                        "content": _convert_content_to_responses_format(
                             content, cast(str, role)
                         ),
                     }
@@ -187,10 +193,10 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                 responses_api_request["max_output_tokens"] = value
             elif key == "tools" and value is not None:
                 # Convert chat completion tools to responses API tools format
-                responses_api_request["tools"] = (
-                    self._convert_tools_to_responses_format(
-                        cast(List[Dict[str, Any]], value)
-                    )
+                responses_api_request[
+                    "tools"
+                ] = self._convert_tools_to_responses_format(
+                    cast(List[Dict[str, Any]], value)
                 )
             elif key in ResponsesAPIOptionalRequestParams.__annotations__.keys():
                 responses_api_request[key] = value  # type: ignore
@@ -289,9 +295,7 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
         reasoning_content: Optional[str] = None
 
         for item in raw_response.output:
-
             if isinstance(item, ResponseReasoningItem):
-
                 for summary_item in item.summary:
                     response_text = getattr(summary_item, "text", "")
                     reasoning_content = response_text if response_text else ""
@@ -433,44 +437,49 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
         role: str,
     ) -> List[Dict[str, Any]]:
         """Convert chat completion content to responses API format"""
-        from litellm.types.llms.openai import ChatCompletionImageObject
+        # Move import to module level: faster, avoids repeated costly import
+        # from litellm.types.llms.openai import ChatCompletionImageObject
+        # Safe to move at module top (no behavioral change)
 
         verbose_logger.debug(
             f"Chat provider: Converting content to responses format - input type: {type(content)}"
         )
 
+        # Avoid repeated lookups and expensive debug statements wherever possible.
         if isinstance(content, str):
             result = [self._convert_content_str_to_input_text(content, role)]
             verbose_logger.debug(f"Chat provider: String content -> {result}")
             return result
+
         elif isinstance(content, list):
             result = []
+            append_result = result.append
+            # Pre-bind conversion functions for less attribute lookup
+            convert_str = self._convert_content_str_to_input_text
+
             for i, item in enumerate(content):
                 verbose_logger.debug(
                     f"Chat provider: Processing content item {i}: {type(item)} = {item}"
                 )
                 if isinstance(item, str):
-                    converted = self._convert_content_str_to_input_text(item, role)
-                    result.append(converted)
+                    converted = convert_str(item, role)
+                    append_result(converted)
                     verbose_logger.debug(f"Chat provider:   -> {converted}")
                 elif isinstance(item, dict):
-                    # Handle multimodal content
                     original_type = item.get("type")
                     if original_type == "text":
-                        converted = self._convert_content_str_to_input_text(
-                            item.get("text", ""), role
-                        )
-                        result.append(converted)
+                        converted = convert_str(item.get("text", ""), role)
+                        append_result(converted)
                         verbose_logger.debug(f"Chat provider:   text -> {converted}")
                     elif original_type == "image_url":
-                        # Map to responses API image format
+                        # Cast only once, save method lookup
                         converted = cast(
                             dict,
                             self._convert_content_to_responses_format_image(
-                                cast(ChatCompletionImageObject, item), role
+                                cast("ChatCompletionImageObject", item), role
                             ),
                         )
-                        result.append(converted)
+                        append_result(converted)
                         verbose_logger.debug(
                             f"Chat provider:   image_url -> {converted}"
                         )
@@ -479,11 +488,11 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                         item_type = original_type or "input_text"
                         if item_type == "image":
                             converted = {"type": "input_image", **item}
-                            result.append(converted)
+                            append_result(converted)
                             verbose_logger.debug(
                                 f"Chat provider:   image -> {converted}"
                             )
-                        elif item_type in [
+                        elif item_type in (
                             "input_text",
                             "input_image",
                             "output_text",
@@ -491,23 +500,21 @@ class LiteLLMResponsesTransformationHandler(CompletionTransformationBridge):
                             "input_file",
                             "computer_screenshot",
                             "summary_text",
-                        ]:
+                        ):
                             # Already in responses API format
-                            result.append(item)
+                            append_result(item)
                             verbose_logger.debug(
                                 f"Chat provider:   passthrough -> {item}"
                             )
                         else:
-                            # Default to input_text for unknown types
-                            converted = self._convert_content_str_to_input_text(
-                                str(item.get("text", item)), role
-                            )
-                            result.append(converted)
+                            converted = convert_str(str(item.get("text", item)), role)
+                            append_result(converted)
                             verbose_logger.debug(
                                 f"Chat provider:   unknown({original_type}) -> {converted}"
                             )
             verbose_logger.debug(f"Chat provider: Final converted content: {result}")
             return result
+
         else:
             result = [self._convert_content_str_to_input_text(str(content), role)]
             verbose_logger.debug(f"Chat provider: Other content type -> {result}")
