@@ -20,9 +20,14 @@ else:
 class VectorStoreRegistry:
     def __init__(self, vector_stores: List[LiteLLM_ManagedVectorStore] = []):
         self.vector_stores: List[LiteLLM_ManagedVectorStore] = vector_stores
+        # Precompute mapping for fast lookups
         self.vector_store_ids_to_vector_store_map: Dict[
             str, LiteLLM_ManagedVectorStore
-        ] = {}
+        ] = {
+            vs.get("vector_store_id"): vs
+            for vs in vector_stores
+            if "vector_store_id" in vs  # Defensive: vector_store_id should exist
+        }
 
     def get_vector_store_ids_to_run(
         self, non_default_params: Dict, tools: Optional[List[Dict]] = None
@@ -32,16 +37,19 @@ class VectorStoreRegistry:
 
         vector_store_ids can be provided in two ways:
         """
-        vector_store_ids: List[str] = []
-
         # 1. check if vector_store_ids is provided in the non_default_params
-        vector_store_ids = non_default_params.get("vector_store_ids", None) or []
-
-        # 2. check if vector_store_ids is provided as a tool in the request
-        vector_store_ids = self._get_vector_store_ids_from_tool_calls(
-            tools=tools, vector_store_ids=vector_store_ids
+        vector_store_ids: List[str] = (
+            non_default_params.get("vector_store_ids", None) or []
         )
 
+        # 2. check if vector_store_ids is provided as a tool in the request
+        # _get_vector_store_ids_from_tool_calls EXTENDS, so avoid copying if empty
+        if tools:
+            for tool in tools:
+                # Inlined, avoids passing and copying the list again
+                ids = tool.get("vector_store_ids")
+                if ids:
+                    vector_store_ids.extend(ids)
         return vector_store_ids
 
     def pop_vector_store_ids_to_run(
@@ -118,14 +126,16 @@ class VectorStoreRegistry:
             non_default_params=non_default_params, tools=tools
         )
 
-        # check if the vector store ids are in the registry
         if len(vector_store_ids) <= 0:
             return None
 
+        # Use pre-built dict for O(1) lookups
         for vector_store_id in vector_store_ids:
-            for vector_store in self.vector_stores:
-                if vector_store.get("vector_store_id") == vector_store_id:
-                    return vector_store
+            vector_store = self.vector_store_ids_to_vector_store_map.get(
+                vector_store_id
+            )
+            if vector_store is not None:
+                return vector_store
         return None
 
     def get_litellm_managed_vector_store_from_registry(
