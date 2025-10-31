@@ -481,10 +481,15 @@ def _custom_logger_class_exists_in_failure_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
-    return any(
-        isinstance(cb, type(callback_class))
-        for cb in litellm.failure_callback + litellm._async_failure_callback
-    )
+    cb_type = type(callback_class)
+    # Merge lists efficiently without creating a new list object
+    for cb in litellm.failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    for cb in litellm._async_failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    return False
 
 
 def get_request_guardrails(kwargs: Dict[str, Any]) -> List[str]:
@@ -905,12 +910,10 @@ def _get_wrapper_timeout(
     Get the timeout from the kwargs
     Used for the wrapper functions.
     """
-
-    timeout = cast(
-        Optional[Union[float, int, httpx.Timeout]], kwargs.get("timeout", None)
-    )
-
-    return timeout
+    # Optimization: Avoid typing.cast overhead, return directly
+    # 'kwargs.get' already returns the correct type as per usage; the cast is for type checkers only,
+    # and at runtime is a no-op. We eliminate it for a negligible micro-optimization.
+    return kwargs.get("timeout", None)
 
 def check_coroutine(value) -> bool:
     return get_coroutine_checker().is_async_callable(value)
