@@ -27,9 +27,7 @@ class CohereEmbeddingConfig:
     def get_supported_openai_params(self) -> List[str]:
         return ["encoding_format"]
 
-    def map_openai_params(
-        self, non_default_params: dict, optional_params: dict
-    ) -> dict:
+    def map_openai_params(self, non_default_params: dict, optional_params: dict) -> dict:
         for k, v in non_default_params.items():
             if k == "encoding_format":
                 optional_params["embedding_types"] = v
@@ -41,9 +39,8 @@ class CohereEmbeddingConfig:
     def _transform_request(
         self, model: str, input: List[str], inference_params: dict
     ) -> CohereEmbeddingRequestWithModel:
-        is_encoded = False
-        for input_str in input:
-            is_encoded = is_base64_encoded(input_str)
+        # The prior loop only used the last element's result
+        is_encoded = is_base64_encoded(input[-1]) if input else False
 
         if is_encoded:  # check if string is b64 encoded image or not
             transformed_request = CohereEmbeddingRequestWithModel(
@@ -58,8 +55,7 @@ class CohereEmbeddingConfig:
                 input_type=COHERE_DEFAULT_EMBEDDING_INPUT_TYPE,
             )
 
-        for k, v in inference_params.items():
-            transformed_request[k] = v  # type: ignore
+        transformed_request.update(inference_params)  # type: ignore
 
         return transformed_request
 
@@ -124,9 +120,7 @@ class CohereEmbeddingConfig:
         embeddings = response_json["embeddings"]
         output_data = []
         for idx, embedding in enumerate(embeddings):
-            output_data.append(
-                {"object": "embedding", "index": idx, "embedding": embedding}
-            )
+            output_data.append({"object": "embedding", "index": idx, "embedding": embedding})
         model_response.object = "list"
         model_response.data = output_data
         model_response.model = model

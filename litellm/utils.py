@@ -481,10 +481,15 @@ def _custom_logger_class_exists_in_failure_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
-    return any(
-        isinstance(cb, type(callback_class))
-        for cb in litellm.failure_callback + litellm._async_failure_callback
-    )
+    cb_type = type(callback_class)
+    # Merge lists efficiently without creating a new list object
+    for cb in litellm.failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    for cb in litellm._async_failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    return False
 
 
 def get_request_guardrails(kwargs: Dict[str, Any]) -> List[str]:
@@ -6696,19 +6701,12 @@ def is_cached_message(message: AllMessageValues) -> bool:
 
 def is_base64_encoded(s: str) -> bool:
     try:
-        # Strip out the prefix if it exists
-        if not s.startswith(
-            "data:"
-        ):  # require `data:` for base64 str, like openai. Prevents false positives like s='Dog'
+        if not s.startswith("data:"):
             return False
-
-        s = s.split(",")[1]
-
-        # Try to decode the string
-        decoded_bytes = base64.b64decode(s, validate=True)
-
-        # Check if the original string can be re-encoded to the same string
-        return base64.b64encode(decoded_bytes).decode("utf-8") == s
+        s = s.split(",", 1)[1]
+        # Only attempt to decode. If invalid, will error; if valid, it's enough.
+        base64.b64decode(s, validate=True)
+        return True
     except Exception:
         return False
 
