@@ -59,7 +59,7 @@ class VolcEngineEmbeddingConfig(BaseEmbeddingConfig):
     ) -> str:
         """
         Get the complete URL for volcengine embedding API calls.
-        
+
         Args:
             api_base: Optional custom API base URL
             api_key: API key (not used for URL construction)
@@ -67,7 +67,7 @@ class VolcEngineEmbeddingConfig(BaseEmbeddingConfig):
             optional_params: Optional parameters (not used for URL construction)
             litellm_params: LiteLLM parameters (not used for URL construction)
             stream: Stream parameter (not used for URL construction)
-            
+
         Returns:
             Complete URL for the embedding API endpoint
         """
@@ -97,6 +97,7 @@ class VolcEngineEmbeddingConfig(BaseEmbeddingConfig):
         Returns:
             Updated optional_params dict
         """
+        supported_params = {"encoding_format", "user", "extra_headers"}
         for param, value in non_default_params.items():
             if param == "encoding_format":
                 # Volcengine supports: float, base64, null
@@ -110,14 +111,12 @@ class VolcEngineEmbeddingConfig(BaseEmbeddingConfig):
             elif param == "user":
                 # Keep user parameter as-is
                 optional_params["user"] = value
-            elif param in self.get_supported_openai_params(model):
+            elif param in supported_params:
                 optional_params[param] = value
             elif not drop_params:
                 raise ValueError(f"Unsupported parameter for Volcengine: {param}")
 
         return optional_params
-
-
 
     def transform_embedding_request(
         self,
@@ -175,7 +174,7 @@ class VolcEngineEmbeddingConfig(BaseEmbeddingConfig):
         # Add id if present
         if "id" in response_json:
             transformed_response["id"] = response_json["id"]
-        
+
         # Create EmbeddingResponse from transformed data
         return EmbeddingResponse(**transformed_response)
 
@@ -201,6 +200,7 @@ class VolcEngineEmbeddingConfig(BaseEmbeddingConfig):
     ) -> BaseLLMException:
         """Get error class for Volcengine errors"""
         from ..common_utils import VolcEngineError
+
         # Convert dict to httpx.Headers if needed
         if isinstance(headers, dict):
             headers = httpx.Headers(headers)
