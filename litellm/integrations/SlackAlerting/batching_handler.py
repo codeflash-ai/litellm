@@ -20,18 +20,21 @@ else:
 
 def squash_payloads(queue):
     squashed = {}
-    if len(queue) == 0:
+    queue_len = len(queue)
+    if queue_len == 0:
         return squashed
-    if len(queue) == 1:
+    if queue_len == 1:
         return {"key": {"item": queue[0], "count": 1}}
 
-    for item in queue:
-        url = item["url"]
-        alert_type = item["alert_type"]
-        _key = (url, alert_type)
+    # Localize for performance
+    squashed_get = squashed.get
 
-        if _key in squashed:
-            squashed[_key]["count"] += 1
+    for item in queue:
+        _key = (item["url"], item["alert_type"])
+        s = squashed_get(_key)
+        if s is not None:
+            s["count"] += 1
+            # Merge the payloads
             # Merge the payloads
 
         else:
@@ -40,9 +43,7 @@ def squash_payloads(queue):
     return squashed
 
 
-def _print_alerting_payload_warning(
-    payload: dict, slackAlertingInstance: SlackAlertingType
-):
+def _print_alerting_payload_warning(payload: dict, slackAlertingInstance: SlackAlertingType):
     """
     Print the payload to the console when
     slackAlertingInstance.alerting_args.log_to_console is True
@@ -70,12 +71,8 @@ async def send_to_webhook(slackAlertingInstance: SlackAlertingType, item, count)
             data=json.dumps(payload),
         )
         if response.status_code != 200:
-            verbose_proxy_logger.debug(
-                f"Error sending slack alert to url={item['url']}. Error={response.text}"
-            )
+            verbose_proxy_logger.debug(f"Error sending slack alert to url={item['url']}. Error={response.text}")
     except Exception as e:
         verbose_proxy_logger.debug(f"Error sending slack alert: {str(e)}")
     finally:
-        _print_alerting_payload_warning(
-            payload, slackAlertingInstance=slackAlertingInstance
-        )
+        _print_alerting_payload_warning(payload, slackAlertingInstance=slackAlertingInstance)
