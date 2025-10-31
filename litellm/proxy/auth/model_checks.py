@@ -25,9 +25,7 @@ def _check_wildcard_routing(model: str) -> bool:
     return False
 
 
-def get_provider_models(
-    provider: str, litellm_params: Optional[LiteLLM_Params] = None
-) -> Optional[List[str]]:
+def get_provider_models(provider: str, litellm_params: Optional[LiteLLM_Params] = None) -> Optional[List[str]]:
     """
     Returns the list of known models by provider
     """
@@ -35,9 +33,7 @@ def get_provider_models(
         return get_valid_models(litellm_params=litellm_params)
 
     if provider in litellm.models_by_provider:
-        provider_models = get_valid_models(
-            custom_llm_provider=provider, litellm_params=litellm_params
-        )
+        provider_models = get_valid_models(custom_llm_provider=provider, litellm_params=litellm_params)
         return provider_models
     return None
 
@@ -51,9 +47,7 @@ def _get_models_from_access_groups(
     new_models = []
     for idx, model in enumerate(all_models):
         if model in model_access_groups:
-            if (
-                not include_model_access_groups
-            ):  # remove access group, unless requested - e.g. when creating a key
+            if not include_model_access_groups:  # remove access group, unless requested - e.g. when creating a key
                 idx_to_remove.append(idx)
             new_models.extend(model_access_groups[model])
 
@@ -80,7 +74,6 @@ async def get_mcp_server_ids(
 
     # Make a direct SQL query to get just the mcp_servers
     try:
-
         result = await prisma_client.db.litellm_objectpermissiontable.find_unique(
             where={"object_permission_id": user_api_key_dict.object_permission_id},
         )
@@ -114,9 +107,7 @@ def get_key_models(
         if SpecialModelNames.all_proxy_models.value in all_models:
             all_models = proxy_model_list
 
-    all_models = _get_models_from_access_groups(
-        model_access_groups=model_access_groups, all_models=all_models
-    )
+    all_models = _get_models_from_access_groups(model_access_groups=model_access_groups, all_models=all_models)
 
     verbose_proxy_logger.debug("ALL KEY MODELS - {}".format(len(all_models)))
     return all_models
@@ -176,6 +167,7 @@ def get_complete_model_list(
     """
 
     unique_models = []
+
     def append_unique(models):
         for model in models:
             if model not in unique_models:
@@ -188,7 +180,7 @@ def get_complete_model_list(
     else:
         append_unique(proxy_model_list)
         if include_model_access_groups:
-            append_unique(list(model_access_groups.keys())) # TODO: keys order
+            append_unique(list(model_access_groups.keys()))  # TODO: keys order
 
         if user_model:
             append_unique([user_model])
@@ -215,9 +207,7 @@ def get_complete_model_list(
     return complete_model_list
 
 
-def get_known_models_from_wildcard(
-    wildcard_model: str, litellm_params: Optional[LiteLLM_Params] = None
-) -> List[str]:
+def get_known_models_from_wildcard(wildcard_model: str, litellm_params: Optional[LiteLLM_Params] = None) -> List[str]:
     try:
         wildcard_provider_prefix, wildcard_suffix = wildcard_model.split("/", 1)
     except ValueError:  # safely fail
@@ -233,9 +223,7 @@ def get_known_models_from_wildcard(
 
     # get all known provider models
 
-    wildcard_models = get_provider_models(
-        provider=provider, litellm_params=litellm_params
-    )
+    wildcard_models = get_provider_models(provider=provider, litellm_params=litellm_params)
 
     if wildcard_models is None:
         return []
@@ -243,15 +231,9 @@ def get_known_models_from_wildcard(
         ## CHECK IF PARTIAL FILTER e.g. `gemini-*`
         model_prefix = wildcard_suffix.replace("*", "")
 
-        is_partial_filter = any(
-            wc_model.startswith(model_prefix) for wc_model in wildcard_models
-        )
+        is_partial_filter = any(wc_model.startswith(model_prefix) for wc_model in wildcard_models)
         if is_partial_filter:
-            filtered_wildcard_models = [
-                wc_model
-                for wc_model in wildcard_models
-                if wc_model.startswith(model_prefix)
-            ]
+            filtered_wildcard_models = [wc_model for wc_model in wildcard_models if wc_model.startswith(model_prefix)]
             wildcard_models = filtered_wildcard_models
         else:
             # add model prefix to wildcard models
@@ -274,9 +256,7 @@ def _get_wildcard_models(
     all_wildcard_models = []
     for model in unique_models:
         if _check_wildcard_routing(model=model):
-            if (
-                return_wildcard_routes
-            ):  # will add the wildcard route to the list eg: anthropic/*.
+            if return_wildcard_routes:  # will add the wildcard route to the list eg: anthropic/*.
                 all_wildcard_models.append(model)
 
             ## get litellm params from model
@@ -323,9 +303,6 @@ def get_all_fallbacks(
     """
     if llm_router is None:
         return []
-
-    # Get the appropriate fallback list based on type
-    fallbacks_config: list = []
     if fallback_type == "general":
         fallbacks_config = getattr(llm_router, "fallbacks", [])
     elif fallback_type == "context_window":
@@ -341,9 +318,7 @@ def get_all_fallbacks(
 
     try:
         # Use existing function to get fallback model group
-        fallback_model_group, _ = get_fallback_model_group(
-            fallbacks=fallbacks_config, model_group=model
-        )
+        fallback_model_group, _ = get_fallback_model_group(fallbacks=fallbacks_config, model_group=model)
 
         if fallback_model_group is None:
             return []

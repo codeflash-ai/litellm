@@ -42,9 +42,7 @@ def _check_stripped_model_group(model_group: str, fallback_key: str) -> bool:
     return False
 
 
-def get_fallback_model_group(
-    fallbacks: List[Any], model_group: str
-) -> Tuple[Optional[List[str]], Optional[int]]:
+def get_fallback_model_group(fallbacks: List[Any], model_group: str) -> Tuple[Optional[List[str]], Optional[int]]:
     """
     Returns:
     - fallback_model_group: List[str] of fallback model groups. example: ["gpt-4", "gpt-3.5-turbo"]
@@ -58,20 +56,28 @@ def get_fallback_model_group(
     generic_fallback_idx: Optional[int] = None
     stripped_model_fallback: Optional[List[str]] = None
     fallback_model_group: Optional[List[str]] = None
-    ## check for specific model group-specific fallbacks
-    for idx, item in enumerate(fallbacks):
+    idx = 0
+    while idx < len(fallbacks):
+        item = fallbacks[idx]
         if isinstance(item, dict):
-            if list(item.keys())[0] == model_group:  # check exact match
+            # optimize: Avoid repeated list(item.keys())[0] calls
+            item_keys = item.keys()
+            if not item_keys:
+                idx += 1
+                continue
+            key = next(iter(item_keys))
+            if key == model_group:
                 fallback_model_group = item[model_group]
                 break
-            elif _check_stripped_model_group(
-                model_group=model_group, fallback_key=list(item.keys())[0]
-            ):  # check generic fallback
-                stripped_model_fallback = item[list(item.keys())[0]]
-            elif list(item.keys())[0] == "*":  # check generic fallback
+            elif key == "*":
                 generic_fallback_idx = idx
+            elif _check_stripped_model_group(model_group=model_group, fallback_key=key):  # check generic fallback
+                stripped_model_fallback = item[key]
         elif isinstance(item, str):
-            fallback_model_group = [fallbacks.pop(idx)]  # returns single-item list
+            # Do not mutate input list with .pop(), just access element and wrap in a list
+            fallback_model_group = [item]
+            break
+        idx += 1
     ## if none, check for generic fallback
     if fallback_model_group is None:
         if stripped_model_fallback is not None:
@@ -136,9 +142,7 @@ async def run_async_fallback(
             fallback_depth = fallback_depth + 1
             kwargs["fallback_depth"] = fallback_depth
             kwargs["max_fallbacks"] = max_fallbacks
-            response = await litellm_router.async_function_with_fallbacks(
-                *args, **kwargs
-            )
+            response = await litellm_router.async_function_with_fallbacks(*args, **kwargs)
             verbose_router_logger.info("Successful fallback b/w models.")
             response = add_fallback_headers_to_response(
                 response=response,
@@ -161,9 +165,7 @@ async def run_async_fallback(
     raise error_from_fallbacks
 
 
-async def log_success_fallback_event(
-    original_model_group: str, kwargs: dict, original_exception: Exception
-):
+async def log_success_fallback_event(original_model_group: str, kwargs: dict, original_exception: Exception):
     """
     Log a successful fallback event to all registered callbacks.
 
@@ -182,9 +184,7 @@ async def log_success_fallback_event(
     )
 
     for _callback in litellm.callbacks:
-        if isinstance(_callback, CustomLogger) or (
-            _callback in litellm._known_custom_logger_compatible_callbacks
-        ):
+        if isinstance(_callback, CustomLogger) or (_callback in litellm._known_custom_logger_compatible_callbacks):
             try:
                 _callback_custom_logger: Optional[CustomLogger] = None
                 if _callback in litellm._known_custom_logger_compatible_callbacks:
@@ -196,9 +196,7 @@ async def log_success_fallback_event(
                 elif isinstance(_callback, CustomLogger):
                     _callback_custom_logger = _callback
                 else:
-                    verbose_router_logger.exception(
-                        f"{_callback} logger not found / initialized properly"
-                    )
+                    verbose_router_logger.exception(f"{_callback} logger not found / initialized properly")
                     continue
 
                 if _callback_custom_logger is None:
@@ -213,14 +211,10 @@ async def log_success_fallback_event(
                     original_exception=original_exception,
                 )
             except Exception as e:
-                verbose_router_logger.error(
-                    f"Error in log_success_fallback_event: {str(e)}"
-                )
+                verbose_router_logger.error(f"Error in log_success_fallback_event: {str(e)}")
 
 
-async def log_failure_fallback_event(
-    original_model_group: str, kwargs: dict, original_exception: Exception
-):
+async def log_failure_fallback_event(original_model_group: str, kwargs: dict, original_exception: Exception):
     """
     Log a failed fallback event to all registered callbacks.
 
@@ -239,9 +233,7 @@ async def log_failure_fallback_event(
     )
 
     for _callback in litellm.callbacks:
-        if isinstance(_callback, CustomLogger) or (
-            _callback in litellm._known_custom_logger_compatible_callbacks
-        ):
+        if isinstance(_callback, CustomLogger) or (_callback in litellm._known_custom_logger_compatible_callbacks):
             try:
                 _callback_custom_logger: Optional[CustomLogger] = None
                 if _callback in litellm._known_custom_logger_compatible_callbacks:
@@ -253,15 +245,11 @@ async def log_failure_fallback_event(
                 elif isinstance(_callback, CustomLogger):
                     _callback_custom_logger = _callback
                 else:
-                    verbose_router_logger.exception(
-                        f"{_callback} logger not found / initialized properly"
-                    )
+                    verbose_router_logger.exception(f"{_callback} logger not found / initialized properly")
                     continue
 
                 if _callback_custom_logger is None:
-                    verbose_router_logger.exception(
-                        f"{_callback} logger not found / initialized properly"
-                    )
+                    verbose_router_logger.exception(f"{_callback} logger not found / initialized properly")
                     continue
 
                 await _callback_custom_logger.log_failure_fallback_event(
@@ -270,9 +258,7 @@ async def log_failure_fallback_event(
                     original_exception=original_exception,
                 )
             except Exception as e:
-                verbose_router_logger.error(
-                    f"Error in log_failure_fallback_event: {str(e)}"
-                )
+                verbose_router_logger.error(f"Error in log_failure_fallback_event: {str(e)}")
 
 
 def _check_non_standard_fallback_format(fallbacks: Optional[List[Any]]) -> bool:
@@ -297,7 +283,5 @@ def _check_non_standard_fallback_format(fallbacks: Optional[List[Any]]) -> bool:
     return False
 
 
-def run_non_standard_fallback_format(
-    fallbacks: Union[List[str], List[Dict[str, Any]]], model_group: str
-):
+def run_non_standard_fallback_format(fallbacks: Union[List[str], List[Dict[str, Any]]], model_group: str):
     pass
