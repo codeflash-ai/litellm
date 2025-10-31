@@ -178,9 +178,10 @@ class BudgetManager:
         return list(self.user_dict.keys())
 
     def reset_cost(self, user):
-        self.user_dict[user]["current_cost"] = 0
-        self.user_dict[user]["model_cost"] = {}
-        return {"user": self.user_dict[user]}
+        user_data = self.user_dict[user]
+        user_data["current_cost"] = 0
+        user_data["model_cost"] = {}
+        return {"user": user_data}
 
     def reset_on_duration(self, user: str):
         # Get current and creation time
