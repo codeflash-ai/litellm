@@ -175,7 +175,16 @@ class BudgetManager:
         return user in self.user_dict
 
     def get_users(self):
-        return list(self.user_dict.keys())
+        # Return keys as list only if user_dict is not already a list.
+        d = self.user_dict
+        # Optimization: For large dicts, keys() is not expensive.
+        # But avoid allocating a new list if underlying keys are already a list.
+        # If user_dict is dict, dict.keys() returns a view, convert to list.
+        # If user_dict is empty, return empty list without unnecessary allocations.
+        if not d:
+            return []
+        # For CPython, list(d) is slightly faster than list(d.keys())
+        return list(d)
 
     def reset_cost(self, user):
         self.user_dict[user]["current_cost"] = 0
