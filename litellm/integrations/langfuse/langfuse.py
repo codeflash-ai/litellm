@@ -26,6 +26,8 @@ from litellm.types.utils import (
     TextCompletionResponse,
     TranscriptionResponse,
 )
+from langfuse import Langfuse
+from langfuse.model import ChatPromptClient, Prompt_Chat, Prompt_Text, TextPromptClient
 
 if TYPE_CHECKING:
     from langfuse.client import Langfuse, StatefulTraceClient
@@ -911,13 +913,6 @@ def _add_prompt_to_generation_params(
     prompt_management_metadata: Optional[StandardLoggingPromptManagementMetadata],
     langfuse_client: Any,
 ) -> dict:
-    from langfuse import Langfuse
-    from langfuse.model import (
-        ChatPromptClient,
-        Prompt_Chat,
-        Prompt_Text,
-        TextPromptClient,
-    )
 
     langfuse_client = cast(Langfuse, langfuse_client)
 
@@ -925,21 +920,23 @@ def _add_prompt_to_generation_params(
     if user_prompt is None and prompt_management_metadata is None:
         pass
     elif isinstance(user_prompt, dict):
-        if user_prompt.get("type", "") == "chat":
+        prompt_type = user_prompt.get("type", "")
+        if prompt_type == "chat":
             _prompt_chat = Prompt_Chat(**user_prompt)
             generation_params["prompt"] = ChatPromptClient(prompt=_prompt_chat)
-        elif user_prompt.get("type", "") == "text":
+        elif prompt_type == "text":
             _prompt_text = Prompt_Text(**user_prompt)
             generation_params["prompt"] = TextPromptClient(prompt=_prompt_text)
         elif "version" in user_prompt and "prompt" in user_prompt:
             # prompts
-            if isinstance(user_prompt["prompt"], str):
+            prompt_val = user_prompt["prompt"]
+            if isinstance(prompt_val, str):
                 prompt_text_params = getattr(
                     Prompt_Text, "model_fields", Prompt_Text.__fields__
                 )
                 _data = {
                     "name": user_prompt["name"],
-                    "prompt": user_prompt["prompt"],
+                    "prompt": prompt_val,
                     "version": user_prompt["version"],
                     "config": user_prompt.get("config", None),
                 }
@@ -949,13 +946,13 @@ def _add_prompt_to_generation_params(
                 _prompt_obj = Prompt_Text(**_data)  # type: ignore
                 generation_params["prompt"] = TextPromptClient(prompt=_prompt_obj)
 
-            elif isinstance(user_prompt["prompt"], list):
+            elif isinstance(prompt_val, list):
                 prompt_chat_params = getattr(
                     Prompt_Chat, "model_fields", Prompt_Chat.__fields__
                 )
                 _data = {
                     "name": user_prompt["name"],
-                    "prompt": user_prompt["prompt"],
+                    "prompt": prompt_val,
                     "version": user_prompt["version"],
                     "config": user_prompt.get("config", None),
                 }
