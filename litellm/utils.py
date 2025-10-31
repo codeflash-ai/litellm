@@ -481,19 +481,31 @@ def _custom_logger_class_exists_in_failure_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
-    return any(
-        isinstance(cb, type(callback_class))
-        for cb in litellm.failure_callback + litellm._async_failure_callback
-    )
+    cb_type = type(callback_class)
+    # Merge lists efficiently without creating a new list object
+    for cb in litellm.failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    for cb in litellm._async_failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    return False
 
 
 def get_request_guardrails(kwargs: Dict[str, Any]) -> List[str]:
     """
     Get the request guardrails from the kwargs
     """
-    metadata = kwargs.get("metadata") or {}
-    requester_metadata = metadata.get("requester_metadata") or {}
-    applied_guardrails = requester_metadata.get("guardrails") or []
+    # Optimize lookups to minimize unnecessary dict creation and lookups
+    metadata = kwargs.get("metadata")
+    if not metadata:
+        return []
+    requester_metadata = metadata.get("requester_metadata")
+    if not requester_metadata:
+        return []
+    applied_guardrails = requester_metadata.get("guardrails")
+    if not applied_guardrails:
+        return []
     return applied_guardrails
 
 
