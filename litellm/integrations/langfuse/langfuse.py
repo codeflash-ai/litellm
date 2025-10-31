@@ -1009,32 +1009,38 @@ def log_provider_specific_information_as_span(
         None
     """
 
-    _hidden_params = clean_metadata.get("hidden_params", None)
+    _hidden_params = clean_metadata.get("hidden_params")
     if _hidden_params is None:
         return
 
-    vertex_ai_grounding_metadata = _hidden_params.get(
-        "vertex_ai_grounding_metadata", None
-    )
+    vertex_ai_grounding_metadata = _hidden_params.get("vertex_ai_grounding_metadata")
+    if vertex_ai_grounding_metadata is None:
+        return
 
-    if vertex_ai_grounding_metadata is not None:
-        if isinstance(vertex_ai_grounding_metadata, list):
-            for elem in vertex_ai_grounding_metadata:
-                if isinstance(elem, dict):
-                    for key, value in elem.items():
-                        trace.span(
-                            name=key,
-                            input=value,
-                        )
-                else:
-                    trace.span(
-                        name="vertex_ai_grounding_metadata",
-                        input=elem,
-                    )
+    # Fast path: single simple value, not a list
+    if not isinstance(vertex_ai_grounding_metadata, list):
+        trace.span(
+            name="vertex_ai_grounding_metadata",
+            input=vertex_ai_grounding_metadata,
+        )
+        return
+
+    # For list, pre-cache local references and methods for improved loop performance
+    span = trace.span
+    _metadata_list = vertex_ai_grounding_metadata
+    for elem in _metadata_list:
+        if isinstance(elem, dict):
+            elem_items = elem.items()
+            # Use tuple unpacking directly in the loop for better performance
+            for key, value in elem_items:
+                span(
+                    name=key,
+                    input=value,
+                )
         else:
-            trace.span(
+            span(
                 name="vertex_ai_grounding_metadata",
-                input=vertex_ai_grounding_metadata,
+                input=elem,
             )
 
 
