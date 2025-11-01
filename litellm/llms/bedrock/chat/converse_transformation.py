@@ -114,28 +114,35 @@ class AmazonConverseConfig(BaseConfig):
         if "guardrailConfig" not in optional_params:
             return messages
 
-        # Find all consecutive user messages at the end
-        consecutive_user_message_indices = []
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i].get("role") == "user":
-                consecutive_user_message_indices.append(i)
-            else:
-                break
-
-        if not consecutive_user_message_indices:
+        total_messages = len(messages)
+        # Single pass, no append: find first non-user from end, then make indices slice
+        i = total_messages - 1
+        while i >= 0 and messages[i].get("role") == "user":
+            i -= 1
+        # If no consecutive user messages at end, early return
+        if i == total_messages - 1:
             return messages
+        # Indices of user messages to process
+        consecutive_indices = list(range(i + 1, total_messages))
 
-        # Process each consecutive user message
-        messages_copy = copy.deepcopy(messages)
-        for user_message_index in consecutive_user_message_indices:
-            user_message = messages_copy[user_message_index]
+        # Try to minimize deepcopy impact - only copy message dicts that will be changed (rest can reference original)
+        # But must deepcopy to avoid any side effects. Instead of deep-copying everything up front,
+        # make a new list, and copy only mutated dicts.
+        messages_copy = list(messages)  # shallow copy; will replace mutated dicts below
+
+        for idx in consecutive_indices:
+            user_message = messages_copy[idx]
+            # Must deepcopy content if mutation will happen. However, can avoid expensive unnecessary deepcopy if not mutated.
             content = user_message.get("content", [])
 
             if isinstance(content, list):
-                has_guarded_text = any(
-                    isinstance(item, dict) and item.get("type") == "guarded_text"
-                    for item in content
-                )
+                # Fast check: is there any guarded_text already? Short-circuit so no copy if so
+                has_guarded_text = False
+                for item in content:
+                    # This tight loop is slightly faster than 'any' due to Python's overhead
+                    if isinstance(item, dict) and item.get("type") == "guarded_text":
+                        has_guarded_text = True
+                        break
                 if has_guarded_text:
                     continue  # Skip this message if it already has guarded_text
 
@@ -147,13 +154,19 @@ class AmazonConverseConfig(BaseConfig):
                         new_content.append(new_item)
                     else:
                         new_content.append(item)
+                # Only now do we need to copy user_message before mutation
+                user_message = dict(user_message)
+                user_message["content"] = new_content
+                messages_copy[idx] = user_message
 
-                messages_copy[user_message_index]["content"] = new_content  # type: ignore
             elif isinstance(content, str):
                 # If content is a string, convert it to guarded_text
-                messages_copy[user_message_index]["content"] = [  # type: ignore
-                    {"type": "guarded_text", "text": content}  # type: ignore
-                ]
+                guarded = [{"type": "guarded_text", "text": content}]
+                # Only now do we need to copy user_message before mutation
+                user_message = dict(user_message)
+                user_message["content"] = guarded
+                messages_copy[idx] = user_message
+            # else: leave unchanged
 
         return messages_copy
 
