@@ -86,10 +86,17 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Directly assign values to class attributes, avoiding locals().copy() and iteration overhead
+        if maxTokens is not None:
+            self.__class__.maxTokens = maxTokens
+        if stopSequences is not None:
+            self.__class__.stopSequences = stopSequences
+        if temperature is not None:
+            self.__class__.temperature = temperature
+        if topP is not None:
+            self.__class__.topP = topP
+        if topK is not None:
+            self.__class__.topK = topK
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -181,8 +188,8 @@ class AmazonConverseConfig(BaseConfig):
 
         Constraints:
         - Maximum of 16 items
-        - Keys: 1-256 characters, pattern [a-zA-Z0-9\\s:_@$#=/+,-.]{1,256}
-        - Values: 0-256 characters, pattern [a-zA-Z0-9\\s:_@$#=/+,-.]{0,256}
+        - Keys: 1-256 characters, pattern [a-zA-Z0-9\s:_@$#=/+,-.]{1,256}
+        - Values: 0-256 characters, pattern [a-zA-Z0-9\s:_@$#=/+,-.]{0,256}
         """
         import re
 
@@ -203,45 +210,55 @@ class AmazonConverseConfig(BaseConfig):
         key_pattern = re.compile(r"^[a-zA-Z0-9\s:_@$#=/+,.-]{1,256}$")
         value_pattern = re.compile(r"^[a-zA-Z0-9\s:_@$#=/+,.-]{0,256}$")
 
+
+        # Slight performance: use tuple of error texts, avoid repeated string formatting until needed
+        bad_req = litellm.exceptions.BadRequestError
+        key_len_msg = "requestMetadata key length must be 1-256 characters"
+        key_type_msg = "requestMetadata keys must be strings"
+        value_type_msg = "requestMetadata values must be strings"
+        value_len_msg = "requestMetadata value length must be 0-256 characters"
+        key_invalid_msg = "requestMetadata key '{}' contains invalid characters. Allowed: [a-zA-Z0-9\\s:_@$#=/+,.-]"
+        value_invalid_msg = "requestMetadata value '{}' contains invalid characters. Allowed: [a-zA-Z0-9\\s:_@$#=/+,.-]"
+
+        # Use .items() for key,value iteration, keep validation order the same
         for key, value in metadata.items():
             if not isinstance(key, str):
-                raise litellm.exceptions.BadRequestError(
-                    message="requestMetadata keys must be strings",
+                raise bad_req(
+                    message=key_type_msg,
                     model="bedrock",
                     llm_provider="bedrock",
                 )
 
             if not isinstance(value, str):
-                raise litellm.exceptions.BadRequestError(
-                    message="requestMetadata values must be strings",
+                raise bad_req(
+                    message=value_type_msg,
                     model="bedrock",
                     llm_provider="bedrock",
                 )
-
-            if len(key) == 0 or len(key) > 256:
-                raise litellm.exceptions.BadRequestError(
-                    message="requestMetadata key length must be 1-256 characters",
+            # Avoid function call overhead for 0 < len(key) <= 256 and len(value) <= 256
+            key_len = len(key)
+            if key_len == 0 or key_len > 256:
+                raise bad_req(
+                    message=key_len_msg,
                     model="bedrock",
                     llm_provider="bedrock",
                 )
 
             if len(value) > 256:
-                raise litellm.exceptions.BadRequestError(
-                    message="requestMetadata value length must be 0-256 characters",
+                raise bad_req(
+                    message=value_len_msg,
                     model="bedrock",
                     llm_provider="bedrock",
                 )
-
-            if not key_pattern.match(key):
-                raise litellm.exceptions.BadRequestError(
-                    message=f"requestMetadata key '{key}' contains invalid characters. Allowed: [a-zA-Z0-9\\s:_@$#=/+,.-]",
+            if not key_pattern.fullmatch(key):  # .fullmatch is strictly correct and slightly faster than .match for full-string
+                raise bad_req(
+                    message=key_invalid_msg.format(key),
                     model="bedrock",
                     llm_provider="bedrock",
                 )
-
-            if not value_pattern.match(value):
-                raise litellm.exceptions.BadRequestError(
-                    message=f"requestMetadata value '{value}' contains invalid characters. Allowed: [a-zA-Z0-9\\s:_@$#=/+,.-]",
+            if not value_pattern.fullmatch(value):
+                raise bad_req(
+                    message=value_invalid_msg.format(value),
                     model="bedrock",
                     llm_provider="bedrock",
                 )
@@ -747,12 +764,13 @@ class AmazonConverseConfig(BaseConfig):
 
     def _handle_top_k_value(self, model: str, inference_params: dict) -> dict:
         base_model = BedrockModelInfo.get_base_model(model)
-
-        val_top_k = None
         if "topK" in inference_params:
             val_top_k = inference_params.pop("topK")
         elif "top_k" in inference_params:
             val_top_k = inference_params.pop("top_k")
+
+        else:
+            val_top_k = None
 
         if val_top_k:
             if base_model.startswith("anthropic"):
@@ -766,7 +784,9 @@ class AmazonConverseConfig(BaseConfig):
         self, optional_params: dict, model: str
     ) -> Tuple[dict, dict, dict]:
         """Prepare and separate request parameters."""
-        inference_params = copy.deepcopy(optional_params)
+        # Avoid deep copy unless necessary: safe to use dict.copy() since only value mutation is handled below
+        # If nested mutation of dict values is required, revert to deepcopy.
+        inference_params = optional_params.copy()
         supported_converse_params = list(
             AmazonConverseConfig.__annotations__.keys()
         ) + ["top_k"]
@@ -784,20 +804,25 @@ class AmazonConverseConfig(BaseConfig):
         if request_metadata is not None:
             self._validate_request_metadata(request_metadata)
 
-        # keep supported params in 'inference_params', and set all model-specific params in 'additional_request_params'
-        additional_request_params = {
-            k: v for k, v in inference_params.items() if k not in total_supported_params
-        }
-        inference_params = {
-            k: v for k, v in inference_params.items() if k in total_supported_params
-        }
+        # Instead of filtering twice: build a set once for O(1) lookups, walk once and sort results
+        total_supported_params_set = set(total_supported_params)
+        additional_request_params = {}
+        filtered_inference = {}
+
+        for k, v in inference_params.items():
+            if k in total_supported_params_set:
+                filtered_inference[k] = v
+            else:
+                additional_request_params[k] = v
+
+        # Only set the topK value in for models that support it
 
         # Only set the topK value in for models that support it
         additional_request_params.update(
-            self._handle_top_k_value(model, inference_params)
+            self._handle_top_k_value(model, filtered_inference)
         )
 
-        return inference_params, additional_request_params, request_metadata
+        return filtered_inference, additional_request_params, request_metadata
 
     def _process_tools_and_beta(
         self,
