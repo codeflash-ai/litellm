@@ -5,7 +5,7 @@ Translating between OpenAI's `/chat/completion` format and Amazon's `/converse` 
 import copy
 import time
 import types
-from typing import List, Literal, Optional, Tuple, Union, cast, overload
+from typing import List, Literal, Optional, Tuple, Union, cast
 
 import httpx
 
@@ -56,6 +56,7 @@ from ..common_utils import (
     get_anthropic_beta_from_headers,
     get_bedrock_tool_name,
 )
+import json
 
 # Computer use tool prefixes supported by Bedrock
 BEDROCK_COMPUTER_USE_TOOLS = [
@@ -664,7 +665,6 @@ class AmazonConverseConfig(BaseConfig):
                     thinking_token_budget + DEFAULT_MAX_TOKENS
                 )
 
-    @overload
     def _get_cache_point_block(
         self,
         message_block: Union[
@@ -675,9 +675,13 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["system"],
     ) -> Optional[SystemContentBlock]:
-        pass
+        if message_block.get("cache_control", None) is None:
+            return None
+        if block_type == "system":
+            return SystemContentBlock(cachePoint=CachePointBlock(type="default"))
+        else:
+            return ContentBlock(cachePoint=CachePointBlock(type="default"))
 
-    @overload
     def _get_cache_point_block(
         self,
         message_block: Union[
@@ -688,7 +692,12 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["content_block"],
     ) -> Optional[ContentBlock]:
-        pass
+        if message_block.get("cache_control", None) is None:
+            return None
+        if block_type == "system":
+            return SystemContentBlock(cachePoint=CachePointBlock(type="default"))
+        else:
+            return ContentBlock(cachePoint=CachePointBlock(type="default"))
 
     def _get_cache_point_block(
         self,
@@ -712,32 +721,45 @@ class AmazonConverseConfig(BaseConfig):
     ) -> Tuple[List[AllMessageValues], List[SystemContentBlock]]:
         system_prompt_indices = []
         system_content_blocks: List[SystemContentBlock] = []
+
+        # Loop over all messages, process only "system" roles
+        append = system_content_blocks.append   # local variable for faster access
+        get_cache_point_block = self._get_cache_point_block  # local for tight loop
+
         for idx, message in enumerate(messages):
             if message["role"] == "system":
                 system_prompt_indices.append(idx)
-                if isinstance(message["content"], str) and message["content"]:
-                    system_content_blocks.append(
-                        SystemContentBlock(text=message["content"])
-                    )
-                    cache_block = self._get_cache_point_block(
-                        message, block_type="system"
-                    )
-                    if cache_block:
-                        system_content_blocks.append(cache_block)
-                elif isinstance(message["content"], list):
-                    for m in message["content"]:
-                        if m.get("type") == "text" and m.get("text"):
-                            system_content_blocks.append(
-                                SystemContentBlock(text=m["text"])
-                            )
-                            cache_block = self._get_cache_point_block(
-                                m, block_type="system"
-                            )
-                            if cache_block:
-                                system_content_blocks.append(cache_block)
-        if len(system_prompt_indices) > 0:
+                content = message["content"]
+                # Fast path for str
+                if isinstance(content, str) and content:
+                    block = SystemContentBlock(text=content)
+                    append(block)
+                    # Inline cache check, only call if cache_control exists
+                    if message.get("cache_control") is not None:
+                        cache_block = get_cache_point_block(message, block_type="system")
+                        if cache_block:
+                            append(cache_block)
+                # Content is a list
+                elif isinstance(content, list) and content:
+                    for m in content:
+                        # Fast path for text content
+                        text = m.get("text")
+                        if m.get("type") == "text" and text:
+                            block = SystemContentBlock(text=text)
+                            append(block)
+                            # Inline cache check
+                            if m.get("cache_control") is not None:
+                                cache_block = get_cache_point_block(m, block_type="system")
+                                if cache_block:
+                                    append(cache_block)
+
+        # Pop indices in reverse order to avoid shifting the list
+        if system_prompt_indices:
+            # Optimization: If indices are clustered at start/end, bulk deletion would be faster,
+            # but pops are required for behavioral preservation.
             for idx in reversed(system_prompt_indices):
                 messages.pop(idx)
+
         return messages, system_content_blocks
 
     def _transform_inference_params(self, inference_params: dict) -> InferenceConfig:
