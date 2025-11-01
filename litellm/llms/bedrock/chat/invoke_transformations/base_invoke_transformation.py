@@ -65,9 +65,9 @@ class AmazonInvokeConfig(BaseConfig, BaseAWSLLM):
         This is a base invoke model mapping. For Invoke - define a bedrock provider specific config that extends this class.
         """
         for param, value in non_default_params.items():
-            if param == "max_tokens" or param == "max_completion_tokens":
+            if param in ("max_tokens", "max_completion_tokens"):
                 optional_params["max_tokens"] = value
-            if param == "stream":
+            elif param == "stream":
                 optional_params["stream"] = value
         return optional_params
 
