@@ -27,13 +27,9 @@ class PredibaseConfig(BaseConfig):
     best_of: Optional[int] = None
     decoder_input_details: Optional[bool] = None
     details: bool = True  # enables returning logprobs + best of
-    max_new_tokens: int = (
-        DEFAULT_MAX_TOKENS  # openai default - requests hang if max_new_tokens not given
-    )
+    max_new_tokens: int = DEFAULT_MAX_TOKENS  # openai default - requests hang if max_new_tokens not given
     repetition_penalty: Optional[float] = None
-    return_full_text: Optional[
-        bool
-    ] = False  # by default don't return the input as part of the output
+    return_full_text: Optional[bool] = False  # by default don't return the input as part of the output
     seed: Optional[int] = None
     stop: Optional[List[str]] = None
     temperature: Optional[float] = None
@@ -60,10 +56,27 @@ class PredibaseConfig(BaseConfig):
         typical_p: Optional[float] = None,
         watermark: Optional[bool] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Use __dict__ assignment for better attribute setting performance
+        # Only set attributes for values not None (skip "self")
+        for key in (
+            "best_of",
+            "decoder_input_details",
+            "details",
+            "max_new_tokens",
+            "repetition_penalty",
+            "return_full_text",
+            "seed",
+            "stop",
+            "temperature",
+            "top_k",
+            "top_p",
+            "truncate",
+            "typical_p",
+            "watermark",
+        ):
+            value = locals()[key]
+            if value is not None:
+                setattr(self, key, value)
 
     @classmethod
     def get_config(cls):
@@ -100,9 +113,7 @@ class PredibaseConfig(BaseConfig):
                 optional_params["top_p"] = value
             if param == "n":
                 optional_params["best_of"] = value
-                optional_params[
-                    "do_sample"
-                ] = True  # Need to sample if you want best of for hf inference endpoints
+                optional_params["do_sample"] = True  # Need to sample if you want best of for hf inference endpoints
             if param == "stream":
                 optional_params["stream"] = value
             if param == "stop":
@@ -151,12 +162,8 @@ class PredibaseConfig(BaseConfig):
             "Predibase transformation currently done in handler.py. Need to migrate to this file."
         )
 
-    def get_error_class(
-        self, error_message: str, status_code: int, headers: Union[dict, Headers]
-    ) -> BaseLLMException:
-        return PredibaseError(
-            status_code=status_code, message=error_message, headers=headers
-        )
+    def get_error_class(self, error_message: str, status_code: int, headers: Union[dict, Headers]) -> BaseLLMException:
+        return PredibaseError(status_code=status_code, message=error_message, headers=headers)
 
     def validate_environment(
         self,
