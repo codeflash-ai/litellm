@@ -5,7 +5,7 @@ Translating between OpenAI's `/chat/completion` format and Amazon's `/converse` 
 import copy
 import time
 import types
-from typing import List, Literal, Optional, Tuple, Union, cast, overload
+from typing import List, Literal, Optional, Tuple, Union, cast
 
 import httpx
 
@@ -86,10 +86,18 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # More efficient attribute assignment for the dataclass-like init pattern
+        # Only set attributes for provided keyword args, skip None values.
+        if maxTokens is not None:
+            setattr(self.__class__, "maxTokens", maxTokens)
+        if stopSequences is not None:
+            setattr(self.__class__, "stopSequences", stopSequences)
+        if temperature is not None:
+            setattr(self.__class__, "temperature", temperature)
+        if topP is not None:
+            setattr(self.__class__, "topP", topP)
+        if topK is not None:
+            setattr(self.__class__, "topK", topK)
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -664,7 +672,6 @@ class AmazonConverseConfig(BaseConfig):
                     thinking_token_budget + DEFAULT_MAX_TOKENS
                 )
 
-    @overload
     def _get_cache_point_block(
         self,
         message_block: Union[
@@ -675,9 +682,29 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["system"],
     ) -> Optional[SystemContentBlock]:
-        pass
+        # Fast path: avoid unnecessary .get if "cache_control" not in dict,
+        # .get() is fast, but bulk of time is constructing new ContentBlock/SystemContentBlock
+        # Optimize by caching the default CachePointBlock instance
+        if "cache_control" not in message_block or message_block["cache_control"] is None:
+            return None
 
-    @overload
+        # Cache the default CachePointBlock at the class level
+        cls = AmazonConverseConfig
+        if not hasattr(cls, "_default_cache_point_block"):
+            cls._default_cache_point_block = CachePointBlock(type="default")
+        default_cache_point = cls._default_cache_point_block
+
+        if block_type == "system":
+            # Cache the SystemContentBlock with the shared CachePointBlock instance at class level
+            if not hasattr(cls, "_system_content_block"):
+                cls._system_content_block = SystemContentBlock(cachePoint=default_cache_point)
+            return cls._system_content_block
+        else:
+            # Cache the ContentBlock with the shared CachePointBlock instance at class level
+            if not hasattr(cls, "_content_block"):
+                cls._content_block = ContentBlock(cachePoint=default_cache_point)
+            return cls._content_block
+
     def _get_cache_point_block(
         self,
         message_block: Union[
@@ -688,7 +715,28 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["content_block"],
     ) -> Optional[ContentBlock]:
-        pass
+        # Fast path: avoid unnecessary .get if "cache_control" not in dict,
+        # .get() is fast, but bulk of time is constructing new ContentBlock/SystemContentBlock
+        # Optimize by caching the default CachePointBlock instance
+        if "cache_control" not in message_block or message_block["cache_control"] is None:
+            return None
+
+        # Cache the default CachePointBlock at the class level
+        cls = AmazonConverseConfig
+        if not hasattr(cls, "_default_cache_point_block"):
+            cls._default_cache_point_block = CachePointBlock(type="default")
+        default_cache_point = cls._default_cache_point_block
+
+        if block_type == "system":
+            # Cache the SystemContentBlock with the shared CachePointBlock instance at class level
+            if not hasattr(cls, "_system_content_block"):
+                cls._system_content_block = SystemContentBlock(cachePoint=default_cache_point)
+            return cls._system_content_block
+        else:
+            # Cache the ContentBlock with the shared CachePointBlock instance at class level
+            if not hasattr(cls, "_content_block"):
+                cls._content_block = ContentBlock(cachePoint=default_cache_point)
+            return cls._content_block
 
     def _get_cache_point_block(
         self,
@@ -700,12 +748,28 @@ class AmazonConverseConfig(BaseConfig):
         ],
         block_type: Literal["system", "content_block"],
     ) -> Optional[Union[SystemContentBlock, ContentBlock]]:
-        if message_block.get("cache_control", None) is None:
+        # Fast path: avoid unnecessary .get if "cache_control" not in dict,
+        # .get() is fast, but bulk of time is constructing new ContentBlock/SystemContentBlock
+        # Optimize by caching the default CachePointBlock instance
+        if "cache_control" not in message_block or message_block["cache_control"] is None:
             return None
+
+        # Cache the default CachePointBlock at the class level
+        cls = AmazonConverseConfig
+        if not hasattr(cls, "_default_cache_point_block"):
+            cls._default_cache_point_block = CachePointBlock(type="default")
+        default_cache_point = cls._default_cache_point_block
+
         if block_type == "system":
-            return SystemContentBlock(cachePoint=CachePointBlock(type="default"))
+            # Cache the SystemContentBlock with the shared CachePointBlock instance at class level
+            if not hasattr(cls, "_system_content_block"):
+                cls._system_content_block = SystemContentBlock(cachePoint=default_cache_point)
+            return cls._system_content_block
         else:
-            return ContentBlock(cachePoint=CachePointBlock(type="default"))
+            # Cache the ContentBlock with the shared CachePointBlock instance at class level
+            if not hasattr(cls, "_content_block"):
+                cls._content_block = ContentBlock(cachePoint=default_cache_point)
+            return cls._content_block
 
     def _transform_system_message(
         self, messages: List[AllMessageValues]
