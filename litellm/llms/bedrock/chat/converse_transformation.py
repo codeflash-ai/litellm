@@ -370,12 +370,12 @@ class AmazonConverseConfig(BaseConfig):
         if tools is None:
             return False
 
+        computer_use_prefixes = tuple(BEDROCK_COMPUTER_USE_TOOLS)
         for tool in tools:
             if "type" in tool:
                 tool_type = tool["type"]
-                for computer_use_prefix in BEDROCK_COMPUTER_USE_TOOLS:
-                    if tool_type.startswith(computer_use_prefix):
-                        return True
+                if tool_type.startswith(computer_use_prefixes):
+                    return True
         return False
 
     def _transform_computer_use_tools(
