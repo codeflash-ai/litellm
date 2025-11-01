@@ -86,10 +86,16 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Optimize: Set instance variables, not class variables. Use __dict__ directly for speed.
+        for key, value in (
+            ("maxTokens", maxTokens),
+            ("stopSequences", stopSequences),
+            ("temperature", temperature),
+            ("topP", topP),
+            ("topK", topK),
+        ):
+            if value is not None:
+                self.__dict__[key] = value
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -382,21 +388,28 @@ class AmazonConverseConfig(BaseConfig):
         self, computer_use_tools: List[OpenAIChatCompletionToolParam]
     ) -> List[dict]:
         """Transform computer use tools to Bedrock format."""
+
+        # Optimization: Precompute sets for fast prefix matching
+        # Sort the BEDROCK_COMPUTER_USE_TOOLS by descending length for correct matching (if prefixes overlap)
+        computer_use_prefixes = tuple(sorted(BEDROCK_COMPUTER_USE_TOOLS, key=len, reverse=True))
+
+        # Precompute text_editor_ and bash_ prefix for faster comparisons
+        bash_prefix = "bash_"
+        text_editor_prefix = "text_editor_"
+        computer_prefix = "computer_"
+
         transformed_tools: List[dict] = []
+
+        append_transformed = transformed_tools.append  # loc binding for minor loop speedup
 
         for tool in computer_use_tools:
             tool_type = tool.get("type", "")
 
-            # Check if this is a computer use tool with the startswith method
-            is_computer_use_tool = False
-            for computer_use_prefix in BEDROCK_COMPUTER_USE_TOOLS:
-                if tool_type.startswith(computer_use_prefix):
-                    is_computer_use_tool = True
-                    break
+            # Optimization: Directly use any() for prefix matching rather than manual for-loop
+            is_computer_use_tool = tool_type.startswith(computer_use_prefixes)
 
-            transformed_tool: dict = {}
             if is_computer_use_tool:
-                if tool_type.startswith("computer_") and "function" in tool:
+                if tool_type.startswith(computer_prefix) and "function" in tool:
                     # Computer use tool with function format
                     func = tool["function"]
                     transformed_tool = {
@@ -408,15 +421,16 @@ class AmazonConverseConfig(BaseConfig):
                     # Direct tools - just need to ensure name is present
                     transformed_tool = dict(tool)
                     if "name" not in transformed_tool:
-                        if tool_type.startswith("bash_"):
+                        # Check bash_ first, then text_editor_
+                        if tool_type.startswith(bash_prefix):
                             transformed_tool["name"] = "bash"
-                        elif tool_type.startswith("text_editor_"):
+                        elif tool_type.startswith(text_editor_prefix):
                             transformed_tool["name"] = "str_replace_editor"
             else:
                 # Pass through other tools as-is
                 transformed_tool = dict(tool)
 
-            transformed_tools.append(transformed_tool)
+            append_transformed(transformed_tool)
 
         return transformed_tools
 
