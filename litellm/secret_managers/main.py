@@ -3,6 +3,7 @@ import base64
 import binascii
 import os
 import traceback
+from functools import lru_cache
 from typing import Any, Optional, Union
 
 import httpx
@@ -11,9 +12,8 @@ import litellm
 from litellm._logging import print_verbose, verbose_logger
 from litellm.caching.caching import DualCache
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
-from litellm.secret_managers.get_azure_ad_token_provider import (
-    get_azure_ad_token_provider,
-)
+from litellm.secret_managers.get_azure_ad_token_provider import \
+    get_azure_ad_token_provider
 from litellm.types.secret_managers.main import KeyManagementSystem
 
 oidc_cache = DualCache()
@@ -53,6 +53,7 @@ def str_to_bool(value: Optional[str]) -> Optional[bool]:
         return None
 
 
+@lru_cache(maxsize=32)
 def get_secret_str(
     secret_name: str,
     default_value: Optional[Union[str, bool]] = None,
@@ -271,9 +272,8 @@ def get_secret(  # noqa: PLR0915
                     if isinstance(secret, str):
                         secret = secret.strip()
                 elif key_manager == KeyManagementSystem.AWS_SECRET_MANAGER.value:
-                    from litellm.secret_managers.aws_secret_manager_v2 import (
-                        AWSSecretsManagerV2,
-                    )
+                    from litellm.secret_managers.aws_secret_manager_v2 import \
+                        AWSSecretsManagerV2
 
                     if isinstance(client, AWSSecretsManagerV2):
                         secret = client.sync_read_secret(
