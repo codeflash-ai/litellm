@@ -4,7 +4,6 @@ Translating between OpenAI's `/chat/completion` format and Amazon's `/converse` 
 
 import copy
 import time
-import types
 from typing import List, Literal, Optional, Tuple, Union, cast, overload
 
 import httpx
@@ -86,10 +85,18 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Fast path: directly set instance variables rather than class variables,
+        # avoiding unnecessary locals() copy and setattr overhead on the class
+        if maxTokens is not None:
+            self.maxTokens = maxTokens
+        if stopSequences is not None:
+            self.stopSequences = stopSequences
+        if temperature is not None:
+            self.temperature = temperature
+        if topP is not None:
+            self.topP = topP
+        if topK is not None:
+            self.topK = topK
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
@@ -163,15 +170,8 @@ class AmazonConverseConfig(BaseConfig):
             k: v
             for k, v in cls.__dict__.items()
             if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
+            and not callable(v)
+            and not isinstance(v, (classmethod, staticmethod))
             and v is not None
         }
 
