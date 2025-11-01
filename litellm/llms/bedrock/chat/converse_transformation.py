@@ -766,7 +766,8 @@ class AmazonConverseConfig(BaseConfig):
         self, optional_params: dict, model: str
     ) -> Tuple[dict, dict, dict]:
         """Prepare and separate request parameters."""
-        inference_params = copy.deepcopy(optional_params)
+        # Optimization: Replace deep copy with shallow copy for performance.
+        inference_params = optional_params.copy()
         supported_converse_params = list(
             AmazonConverseConfig.__annotations__.keys()
         ) + ["top_k"]
@@ -840,12 +841,7 @@ class AmazonConverseConfig(BaseConfig):
         # Set anthropic_beta in additional_request_params if we have any beta features
         if anthropic_beta_list:
             # Remove duplicates while preserving order
-            unique_betas = []
-            seen = set()
-            for beta in anthropic_beta_list:
-                if beta not in seen:
-                    unique_betas.append(beta)
-                    seen.add(beta)
+            unique_betas = list(dict.fromkeys(anthropic_beta_list))
             additional_request_params["anthropic_beta"] = unique_betas
 
         return bedrock_tools, anthropic_beta_list
