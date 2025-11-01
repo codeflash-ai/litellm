@@ -1051,11 +1051,12 @@ class AmazonConverseConfig(BaseConfig):
 
         Ensures deepseek reasoning content compatible output.
         """
-        reasoning_content_str = ""
-        for block in reasoning_content_blocks:
-            if "reasoningText" in block:
-                reasoning_content_str += block["reasoningText"]["text"]
-        return reasoning_content_str
+        reasoning_content_str = [
+            block["reasoningText"]["text"]
+            for block in reasoning_content_blocks
+            if "reasoningText" in block
+        ]
+        return "".join(reasoning_content_str)
 
     def _transform_thinking_blocks(
         self, thinking_blocks: List[BedrockConverseReasoningContentBlock]
