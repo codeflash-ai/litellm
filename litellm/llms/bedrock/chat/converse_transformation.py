@@ -86,10 +86,17 @@ class AmazonConverseConfig(BaseConfig):
         topP: Optional[int] = None,
         topK: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Directly set attributes on the instance
+        if maxTokens is not None:
+            self.maxTokens = maxTokens
+        if stopSequences is not None:
+            self.stopSequences = stopSequences
+        if temperature is not None:
+            self.temperature = temperature
+        if topP is not None:
+            self.topP = topP
+        if topK is not None:
+            self.topK = topK
 
     @property
     def custom_llm_provider(self) -> Optional[str]:
