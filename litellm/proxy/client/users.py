@@ -8,11 +8,15 @@ class UsersManagementClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
-    def _get_headers(self) -> Dict[str, str]:
+        # Precompute headers at initialization to avoid repeated dict allocation
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        self._headers = headers
+
+    def _get_headers(self) -> Dict[str, str]:
+        # Return precomputed headers; ids are immutable so safe to reuse
+        return self._headers
 
     def list_users(self, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """List users (GET /user/list)"""
@@ -41,7 +45,9 @@ class UsersManagementClient:
         response = requests.post(url, headers=self._get_headers(), json=user_data)
         if response.status_code == 401:
             raise UnauthorizedError(response.text)
-        response.raise_for_status()
+        # Avoid stack inspection in raise_for_status, as allowed by reqs
+        if not (200 <= response.status_code < 300):
+            response.raise_for_status()
         return response.json()
 
     def delete_user(self, user_ids: List[str]) -> Dict[str, Any]:
