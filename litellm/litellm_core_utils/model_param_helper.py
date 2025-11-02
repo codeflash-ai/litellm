@@ -77,7 +77,7 @@ class ModelParamHelper:
 
     @staticmethod
     def get_litellm_provider_specific_params_for_chat_params() -> Set[str]:
-        return set(["thinking"])
+        return {"thinking"}
 
     @staticmethod
     def _get_litellm_supported_chat_completion_kwargs() -> Set[str]:
