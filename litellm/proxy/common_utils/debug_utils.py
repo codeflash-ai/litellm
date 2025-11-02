@@ -439,53 +439,61 @@ def _get_router_memory_stats(llm_router) -> Dict[str, Any]:
     litellm_router_memory: Dict[str, Any] = {}
     try:
         if llm_router is not None:
+            # To reduce attribute lookups, use local variables
+            lr = llm_router
+
             # Model list memory size
-            if hasattr(llm_router, 'model_list') and llm_router.model_list:
-                model_list_size = sys.getsizeof(llm_router.model_list)
+            model_list = getattr(lr, 'model_list', None)
+            if model_list:
+                model_list_size = sys.getsizeof(model_list)
                 litellm_router_memory["model_list"] = {
-                    "num_models": len(llm_router.model_list),
+                    "num_models": len(model_list),
                     "size_bytes": model_list_size,
                     "size_mb": round(model_list_size / (1024 * 1024), 4),
                 }
-                
+
             # Model names set
-            if hasattr(llm_router, 'model_names') and llm_router.model_names:
-                model_names_size = sys.getsizeof(llm_router.model_names)
+            model_names = getattr(lr, 'model_names', None)
+            if model_names:
+                model_names_size = sys.getsizeof(model_names)
                 litellm_router_memory["model_names_set"] = {
-                    "num_model_groups": len(llm_router.model_names),
+                    "num_model_groups": len(model_names),
                     "size_bytes": model_names_size,
                     "size_mb": round(model_names_size / (1024 * 1024), 4),
                 }
-                
+
             # Deployment names list
-            if hasattr(llm_router, 'deployment_names') and llm_router.deployment_names:
-                deployment_names_size = sys.getsizeof(llm_router.deployment_names)
+            deployment_names = getattr(lr, 'deployment_names', None)
+            if deployment_names:
+                deployment_names_size = sys.getsizeof(deployment_names)
                 litellm_router_memory["deployment_names"] = {
-                    "num_deployments": len(llm_router.deployment_names),
+                    "num_deployments": len(deployment_names),
                     "size_bytes": deployment_names_size,
                     "size_mb": round(deployment_names_size / (1024 * 1024), 4),
                 }
-                
+
             # Deployment latency map
-            if hasattr(llm_router, 'deployment_latency_map') and llm_router.deployment_latency_map:
-                latency_map_size = sys.getsizeof(llm_router.deployment_latency_map)
+            deployment_latency_map = getattr(lr, 'deployment_latency_map', None)
+            if deployment_latency_map:
+                latency_map_size = sys.getsizeof(deployment_latency_map)
                 litellm_router_memory["deployment_latency_map"] = {
-                    "num_tracked_deployments": len(llm_router.deployment_latency_map),
+                    "num_tracked_deployments": len(deployment_latency_map),
                     "size_bytes": latency_map_size,
                     "size_mb": round(latency_map_size / (1024 * 1024), 4),
                 }
-                
+
             # Fallback configuration
-            if hasattr(llm_router, 'fallbacks') and llm_router.fallbacks:
-                fallbacks_size = sys.getsizeof(llm_router.fallbacks)
+            fallbacks = getattr(lr, 'fallbacks', None)
+            if fallbacks:
+                fallbacks_size = sys.getsizeof(fallbacks)
                 litellm_router_memory["fallbacks"] = {
-                    "num_fallback_configs": len(llm_router.fallbacks),
+                    "num_fallback_configs": len(fallbacks),
                     "size_bytes": fallbacks_size,
                     "size_mb": round(fallbacks_size / (1024 * 1024), 4),
                 }
-                
+
             # Total router object size
-            router_obj_size = sys.getsizeof(llm_router)
+            router_obj_size = sys.getsizeof(lr)
             litellm_router_memory["router_object"] = {
                 "size_bytes": router_obj_size,
                 "size_mb": round(router_obj_size / (1024 * 1024), 4),
@@ -496,7 +504,7 @@ def _get_router_memory_stats(llm_router) -> Dict[str, Any]:
     except Exception as e:
         verbose_proxy_logger.debug(f"Error getting router memory info: {e}")
         litellm_router_memory = {"error": str(e)}
-    
+
     return litellm_router_memory
 
 
