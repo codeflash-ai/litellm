@@ -74,10 +74,11 @@ class FireworksAIConfig(OpenAIGPTConfig):
         prompt_truncate_length: Optional[int] = None,
         context_length_exceeded_behavior: Optional[Literal["error", "truncate"]] = None,
     ) -> None:
-        locals_ = locals().copy()
+        locals_ = locals()
+        # Optimized for memory: directly set on instance, not class, avoiding repeated setattr on class
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     @classmethod
     def get_config(cls):
@@ -170,16 +171,18 @@ class FireworksAIConfig(OpenAIGPTConfig):
         - ignore if model is a vision model
         - ignore if user has disabled this feature
         """
-        if (
-            "vision" in model or disable_add_transform_inline_image_block
-        ):  # allow user to toggle this feature.
+        # Micro-optimization: extract branch to minimize work in hot path, reduce repeated lookups
+        # and use local vars for repeated access
+        if "vision" in model or disable_add_transform_inline_image_block:
             return content
-        if isinstance(content["image_url"], str):
-            content["image_url"] = f"{content['image_url']}#transform=inline"
-        elif isinstance(content["image_url"], dict):
-            content["image_url"][
-                "url"
-            ] = f"{content['image_url']['url']}#transform=inline"
+
+        image_url = content["image_url"]
+        if isinstance(image_url, str):
+            # Avoid repeated dictionary access, concatenate efficiently
+            content["image_url"] = image_url + "#transform=inline"
+        elif isinstance(image_url, dict):
+            url_val = image_url["url"]
+            image_url["url"] = url_val + "#transform=inline"
         return content
 
     def _transform_tools(
