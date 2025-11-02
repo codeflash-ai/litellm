@@ -75,21 +75,26 @@ class AzureOpenAIAssistantsAPIConfig:
             elif (
                 param == "attachments"
             ):  # this is a v2 param. Azure currently supports the old 'file_id's param
-                file_ids: List[str] = []
                 if isinstance(value, list):
+                    # Optimized: Use list comprehension to collect file_ids and check for missing ones in single pass
+                    file_ids: List[str] = []
+                    missing_file_id_items = []
                     for item in value:
                         if "file_id" in item:
                             file_ids.append(item["file_id"])
                         else:
-                            if litellm.drop_params is True:
-                                pass
-                            else:
-                                raise litellm.utils.UnsupportedParamsError(
-                                    message="Azure doesn't support {}. To drop it from the call, set `litellm.drop_params = True.".format(
-                                        value
-                                    ),
-                                    status_code=400,
-                                )
+                            missing_file_id_items.append(item)
+                    
+                    if missing_file_id_items:
+                        if litellm.drop_params is True:
+                            pass
+                        else:
+                            raise litellm.utils.UnsupportedParamsError(
+                                message="Azure doesn't support {}. To drop it from the call, set `litellm.drop_params = True.".format(
+                                    missing_file_id_items[0]
+                                ),
+                                status_code=400,
+                            )
                 else:
                     raise litellm.utils.UnsupportedParamsError(
                         message="Invalid param. attachments should always be a list. Got={}, Expected=List. Raw value={}".format(
