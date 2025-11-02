@@ -524,22 +524,20 @@ class DataDogLogger(
         DD tags need to be as follows:
             - tags: ["user_handle:dog@gmail.com", "app_version:1.0.0"]
         """
-        base_tags = {
-            "env": os.getenv("DD_ENV", "unknown"),
-            "service": os.getenv("DD_SERVICE", "litellm"),
-            "version": os.getenv("DD_VERSION", "unknown"),
-            "HOSTNAME": DataDogLogger._get_datadog_hostname(),
-            "POD_NAME": os.getenv("POD_NAME", "unknown"),
-        }
-
-        tags = [f"{k}:{v}" for k, v in base_tags.items()]
+        tags = [
+            f"env:{os.getenv('DD_ENV', 'unknown')}",
+            f"service:{os.getenv('DD_SERVICE', 'litellm')}",
+            f"version:{os.getenv('DD_VERSION', 'unknown')}",
+            f"HOSTNAME:{os.getenv('HOSTNAME', '')}",
+            f"POD_NAME:{os.getenv('POD_NAME', 'unknown')}",
+        ]
 
         if standard_logging_object:
             _request_tags: List[str] = (
                 standard_logging_object.get("request_tags", []) or []
             )
-            request_tags = [f"request_tag:{tag}" for tag in _request_tags]
-            tags.extend(request_tags)
+            if _request_tags:
+                tags.extend(f"request_tag:{tag}" for tag in _request_tags)
 
         return ",".join(tags)
 
