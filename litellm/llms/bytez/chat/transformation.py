@@ -91,13 +91,11 @@ class BytezChatConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
-
         adapted_params = {}
 
         all_params = {**non_default_params, **optional_params}
 
         for key, value in all_params.items():
-
             alias = self.openai_to_bytez_param_map.get(key)
 
             if alias is False:
@@ -124,7 +122,6 @@ class BytezChatConfig(BaseConfig):
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
     ) -> dict:
-
         headers.update(
             {
                 "content-type": "application/json",
@@ -134,13 +131,10 @@ class BytezChatConfig(BaseConfig):
         )
 
         if not messages:
-            raise Exception(
-                "kwarg `messages` must be an array of messages that follow the openai chat standard"
-            )
+            raise Exception("kwarg `messages` must be an array of messages that follow the openai chat standard")
 
         if not api_key:
             raise Exception("Missing api_key, make sure you pass in your api key")
-
 
         return headers
 
@@ -193,7 +187,6 @@ class BytezChatConfig(BaseConfig):
         api_key: Optional[str] = None,
         json_mode: Optional[bool] = None,
     ) -> ModelResponse:
-
         json = raw_response.json()  # noqa: F811
 
         error = json.get("error")
@@ -276,9 +269,7 @@ class BytezChatConfig(BaseConfig):
                 timeout=STREAMING_TIMEOUT,
             )
         except httpx.HTTPStatusError as e:
-            raise BytezError(
-                status_code=e.response.status_code, message=e.response.text
-            )
+            raise BytezError(status_code=e.response.status_code, message=e.response.text)
 
         if response.status_code != 200:
             raise BytezError(status_code=response.status_code, message=response.text)
@@ -320,9 +311,7 @@ class BytezChatConfig(BaseConfig):
                 timeout=STREAMING_TIMEOUT,
             )
         except httpx.HTTPStatusError as e:
-            raise BytezError(
-                status_code=e.response.status_code, message=e.response.text
-            )
+            raise BytezError(status_code=e.response.status_code, message=e.response.text)
 
         if response.status_code != 200:
             raise BytezError(status_code=response.status_code, message=response.text)
@@ -387,13 +376,11 @@ open_ai_to_bytez_content_item_map = {
 
 
 def adapt_messages_to_bytez_standard(messages: List[Dict]):
-
     messages = _adapt_string_only_content_to_lists(messages)
 
     new_messages = []
 
     for message in messages:
-
         role = message["role"]
         content: list = message["content"]
 
@@ -432,37 +419,37 @@ def adapt_messages_to_bytez_standard(messages: List[Dict]):
 def _adapt_string_only_content_to_lists(messages: List[Dict]):
     new_messages = []
 
-    for message in messages:
+    dict_type = dict
+    str_type = str
+    list_type = list
+    append_new_message = new_messages.append
 
+    for message in messages:
         role = message.get("role")
         content = message.get("content")
 
-        new_content = []
+        if isinstance(content, str_type):
+            append_new_message({"role": role, "content": [{"type": "text", "text": content}]})
+            continue
 
-        if isinstance(content, str):
-            new_content.append({"type": "text", "text": content})
+        elif isinstance(content, dict_type):
+            append_new_message({"role": role, "content": [content]})
+            continue
 
-        elif isinstance(content, dict):
-            new_content.append(content)
-
-        elif isinstance(content, list):
-
+        elif isinstance(content, list_type):
             new_content_items = []
+            append_item = new_content_items.append
             for content_item in content:
-                if isinstance(content_item, str):
-                    new_content_items.append({"type": "text", "text": content_item})
-                elif isinstance(content_item, dict):
-                    new_content_items.append(content_item)
+                if isinstance(content_item, str_type):
+                    append_item({"type": "text", "text": content_item})
+                elif isinstance(content_item, dict_type):
+                    append_item(content_item)
                 else:
-                    raise Exception(
-                        "`content` can only contain strings or openai content dicts"
-                    )
+                    raise Exception("`content` can only contain strings or openai content dicts")
 
-            new_content += new_content_items
+            append_new_message({"role": role, "content": new_content_items})
         else:
             raise Exception("Content must be a string")
-
-        new_messages.append({"role": role, "content": new_content})
 
     return new_messages
 
