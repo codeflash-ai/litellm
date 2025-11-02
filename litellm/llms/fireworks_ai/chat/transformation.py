@@ -74,10 +74,37 @@ class FireworksAIConfig(OpenAIGPTConfig):
         prompt_truncate_length: Optional[int] = None,
         context_length_exceeded_behavior: Optional[Literal["error", "truncate"]] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Only set attributes that are not None on self (not the class)
+        if tools is not None:
+            self.tools = tools
+        if tool_choice is not None:
+            self.tool_choice = tool_choice
+        if max_tokens is not None:
+            self.max_tokens = max_tokens
+        if temperature is not None:
+            self.temperature = temperature
+        if top_p is not None:
+            self.top_p = top_p
+        if top_k is not None:
+            self.top_k = top_k
+        if frequency_penalty is not None:
+            self.frequency_penalty = frequency_penalty
+        if presence_penalty is not None:
+            self.presence_penalty = presence_penalty
+        if n is not None:
+            self.n = n
+        if stop is not None:
+            self.stop = stop
+        if response_format is not None:
+            self.response_format = response_format
+        if user is not None:
+            self.user = user
+        if logprobs is not None:
+            self.logprobs = logprobs
+        if prompt_truncate_length is not None:
+            self.prompt_truncate_length = prompt_truncate_length
+        if context_length_exceeded_behavior is not None:
+            self.context_length_exceeded_behavior = context_length_exceeded_behavior
 
     @classmethod
     def get_config(cls):
@@ -104,12 +131,21 @@ class FireworksAIConfig(OpenAIGPTConfig):
         ]
         
         # Only add tools for models that support function calling
+
+        extra_params = []
+        # Only add tools for models that support function calling
         if supports_function_calling(model=model, custom_llm_provider="fireworks_ai"):
-            supported_params.append("tools")
+            extra_params.append("tools")
+
+        # Only add tool_choice for models that explicitly support it
         
         # Only add tool_choice for models that explicitly support it
         if supports_tool_choice(model=model, custom_llm_provider="fireworks_ai"):
-            supported_params.append("tool_choice")
+            extra_params.append("tool_choice")
+
+        if extra_params:
+            supported_params.extend(extra_params)
+
         
         return supported_params
 
