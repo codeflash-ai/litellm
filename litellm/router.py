@@ -363,9 +363,7 @@ class Router:
         )
 
         self.assistants_config = assistants_config
-        self.deployment_names: List = (
-            []
-        )  # names of models under litellm_params. ex. azure/chatgpt-v-2
+        self.deployment_names: List = []
         self.deployment_latency_map = {}
         ### CACHING ###
         cache_type: Literal[
@@ -419,7 +417,7 @@ class Router:
 
         # Initialize model_group_alias early since it's used in set_model_list
         self.model_group_alias: Dict[str, Union[str, RouterModelGroupAliasItem]] = (
-            model_group_alias or {}
+            model_group_alias if model_group_alias is not None else {}
         )  # dict to store aliases for router, ex. {"gpt-4": "gpt-3.5-turbo"}, all requests with gpt-4 -> get routed to gpt-3.5-turbo group
 
         # Initialize model ID to deployment index mapping for O(1) lookups
@@ -436,22 +434,16 @@ class Router:
                 if "model" in m["litellm_params"]:
                     self.deployment_latency_map[m["litellm_params"]["model"]] = 0
         else:
-            self.model_list: List = (
-                []
-            )  # initialize an empty list - to allow _add_deployment and delete_deployment to work
+            self.model_list: List = []
 
-        if allowed_fails is not None:
-            self.allowed_fails = allowed_fails
-        else:
-            self.allowed_fails = litellm.allowed_fails
+        self.allowed_fails = allowed_fails if allowed_fails is not None else litellm.allowed_fails
         self.cooldown_time = cooldown_time or DEFAULT_COOLDOWN_TIME_SECONDS
         self.cooldown_cache = CooldownCache(
             cache=self.cache, default_cooldown_time=self.cooldown_time
         )
         self.disable_cooldowns = disable_cooldowns
-        self.failed_calls = (
-            InMemoryCache()
-        )  # cache to track failed call per deployment, if num failed calls within 1 minute > allowed fails, then add it to cooldown
+        self.failed_calls = InMemoryCache()
+
 
         if num_retries is not None:
             self.num_retries = num_retries
@@ -473,45 +465,37 @@ class Router:
         self.retry_after = retry_after
         self.routing_strategy = routing_strategy
 
-        ## SETTING FALLBACKS ##
-        ### validate if it's set + in correct format
-        _fallbacks = fallbacks or litellm.fallbacks
+        _fallbacks = fallbacks if fallbacks else litellm.fallbacks
+
 
         self.validate_fallbacks(fallback_param=_fallbacks)
         ### set fallbacks
         self.fallbacks = _fallbacks
 
         if default_fallbacks is not None or litellm.default_fallbacks is not None:
-            _fallbacks = default_fallbacks or litellm.default_fallbacks
+            default_fb = default_fallbacks or litellm.default_fallbacks
             if self.fallbacks is not None:
-                self.fallbacks.append({"*": _fallbacks})
+                self.fallbacks.append({"*": default_fb})
             else:
-                self.fallbacks = [{"*": _fallbacks}]
+                self.fallbacks = [{"*": default_fb}]
+
 
         self.context_window_fallbacks = (
-            context_window_fallbacks or litellm.context_window_fallbacks
+            context_window_fallbacks if context_window_fallbacks else litellm.context_window_fallbacks
         )
 
         _content_policy_fallbacks = (
-            content_policy_fallbacks or litellm.content_policy_fallbacks
+            content_policy_fallbacks if content_policy_fallbacks else litellm.content_policy_fallbacks
         )
         self.validate_fallbacks(fallback_param=_content_policy_fallbacks)
         self.content_policy_fallbacks = _content_policy_fallbacks
-        self.total_calls: defaultdict = defaultdict(
-            int
-        )  # dict to store total calls made to each model
-        self.fail_calls: defaultdict = defaultdict(
-            int
-        )  # dict to store fail_calls made to each model
-        self.success_calls: defaultdict = defaultdict(
-            int
-        )  # dict to store success_calls  made to each model
-        self.previous_models: List = (
-            []
-        )  # list to store failed calls (passed in as metadata to next call)
 
-        # make Router.chat.completions.create compatible for openai.chat.completions.create
-        default_litellm_params = default_litellm_params or {}
+        self.total_calls: defaultdict = defaultdict(int)
+        self.fail_calls: defaultdict = defaultdict(int)
+        self.success_calls: defaultdict = defaultdict(int)
+        self.previous_models: List = []
+
+        default_litellm_params = default_litellm_params if default_litellm_params is not None else {}
         self.chat = litellm.Chat(params=default_litellm_params, router_obj=self)
 
         # default litellm args
@@ -523,19 +507,6 @@ class Router:
         )
 
         self.deployment_stats: dict = {}  # used for debugging load balancing
-        """
-        deployment_stats = {
-            "122999-2828282-277:
-            {
-                "model": "gpt-3",
-                "api_base": "http://localhost:4000",
-                "num_requests": 20,
-                "avg_latency": 0.001,
-                "num_failures": 0,
-                "num_successes": 20
-            }
-        }
-        """
 
         ### ROUTING SETUP ###
         self.routing_strategy_init(

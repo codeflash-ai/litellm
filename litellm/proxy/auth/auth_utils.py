@@ -94,8 +94,9 @@ def _is_param_allowed(
         return False
 
     for item in configurable_clientside_auth_params:
-        if isinstance(item, str) and param == item:
-            return True
+        if isinstance(item, str):
+            if param == item:
+                return True
         elif isinstance(item, Dict):
             if param == "api_base" and check_regex_or_str_match(
                 request_body_value=request_body_value,
@@ -120,16 +121,16 @@ def _allow_model_level_clientside_configurable_parameters(
     # check if model is set
     model_info = llm_router.get_model_group_info(model_group=model)
     if model_info is None:
-        # check if wildcard model is set
-        if model.split("/", 1)[0] in provider_list:
+        split_model = model.split("/", 1)
+        if split_model and split_model[0] in provider_list:
             model_info = llm_router.get_model_group_info(
-                model_group=model.split("/", 1)[0]
+                model_group=split_model[0]
             )
 
-    if model_info is None:
-        return False
-
-    if model_info is None or model_info.configurable_clientside_auth_params is None:
+    if (
+        model_info is None
+        or model_info.configurable_clientside_auth_params is None
+    ):
         return False
 
     return _is_param_allowed(
