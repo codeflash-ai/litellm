@@ -1,6 +1,7 @@
 import configparser
 import os
 import time
+from functools import lru_cache
 from typing import Dict, Final, List, Optional
 
 CONFIG_FILE_PATH_DEFAULT: Final[str] = "~/.opik.config"
@@ -40,17 +41,7 @@ def create_uuid7():
 def _read_opik_config_file() -> Dict[str, str]:
     config_path = os.path.expanduser(CONFIG_FILE_PATH_DEFAULT)
 
-    config = configparser.ConfigParser()
-    config.read(config_path)
-
-    config_values = {
-        section: dict(config.items(section)) for section in config.sections()
-    }
-
-    if "opik" in config_values:
-        return config_values["opik"]
-
-    return {}
+    return _read_opik_config_file_cached(config_path)
 
 
 def _get_env_variable(key: str) -> Optional[str]:
@@ -108,3 +99,19 @@ def get_traces_and_spans_from_payload(payload: List):
     traces = [_remove_nulls(x) for x in payload if "type" not in x]
     spans = [_remove_nulls(x) for x in payload if "type" in x]
     return traces, spans
+
+
+@lru_cache(maxsize=1)
+def _read_opik_config_file_cached(config_path: str) -> Dict[str, str]:
+    config = configparser.ConfigParser()
+    # Use read_dict for potentially faster parsing if file doesn't exist or is empty,
+    # but keep default logic.
+    read_files = config.read(config_path)
+    if not read_files:
+        return {}
+
+    # Only build the dict for the needed section ("opik") for efficiency
+    if "opik" in config.sections():
+        return dict(config.items("opik"))
+
+    return {}
