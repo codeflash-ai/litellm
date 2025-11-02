@@ -288,13 +288,16 @@ def get_request_route(request: Request) -> str:
     remove base url from path if set e.g. `/genai/chat/completions` -> `/chat/completions
     """
     try:
-        if hasattr(request, "base_url") and request.url.path.startswith(
-            request.base_url.path
-        ):
-            # remove base_url from path
-            return request.url.path[len(request.base_url.path) - 1 :]
+        url_path = request.url.path
+        try:
+            base_url_path = request.base_url.path
+        except AttributeError:
+            return url_path
+        
+        if url_path.startswith(base_url_path):
+            return url_path[len(base_url_path) - 1 :]
         else:
-            return request.url.path
+            return url_path
     except Exception as e:
         verbose_proxy_logger.debug(
             f"error on get_request_route: {str(e)}, defaulting to request.url.path={request.url.path}"
