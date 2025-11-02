@@ -26,20 +26,24 @@ class AzureAIEmbedding(OpenAIChatCompletion):
         input: List,
     ):
         combined_responses = []
-        if (
-            image_embedding_responses is not None
-            and text_embedding_responses is not None
-        ):
+        if image_embedding_responses is not None and text_embedding_responses is not None:
             # Combine and order the results
             text_idx = 0
             image_idx = 0
 
-            for idx in range(len(input)):
-                if idx in image_embeddings_idx:
-                    combined_responses.append(image_embedding_responses[image_idx])
+            # Convert list to set for O(1) membership checking
+            image_embeddings_idx_set = set(image_embeddings_idx)
+            input_len = len(input)
+            image_embedding_responses_ = image_embedding_responses
+            text_embedding_responses_ = text_embedding_responses
+            # Pre-allocate the combined_responses list for better memory locality and reduced dynamic resizing
+            combined_responses = [None] * input_len
+            for idx in range(input_len):
+                if idx in image_embeddings_idx_set:
+                    combined_responses[idx] = image_embedding_responses_[image_idx]
                     image_idx += 1
                 else:
-                    combined_responses.append(text_embedding_responses[text_idx])
+                    combined_responses[idx] = text_embedding_responses_[text_idx]
                     text_idx += 1
 
             model_response.data = combined_responses
@@ -48,7 +52,8 @@ class AzureAIEmbedding(OpenAIChatCompletion):
         elif text_embedding_responses is not None:
             model_response.data = text_embedding_responses
 
-        response = AzureAICohereConfig()._transform_response(response=model_response)  # type: ignore
+        cohere_config = AzureAICohereConfig()
+        response = cohere_config._transform_response(response=model_response)  # type: ignore
 
         return response
 
@@ -148,9 +153,7 @@ class AzureAIEmbedding(OpenAIChatCompletion):
             image_embeddings_request,
             v1_embeddings_request,
             image_embeddings_idx,
-        ) = AzureAICohereConfig()._transform_request(
-            input=input, optional_params=optional_params, model=model
-        )
+        ) = AzureAICohereConfig()._transform_request(input=input, optional_params=optional_params, model=model)
 
         image_embedding_responses: Optional[List] = None
         text_embedding_responses: Optional[List] = None
@@ -236,9 +239,7 @@ class AzureAIEmbedding(OpenAIChatCompletion):
             image_embeddings_request,
             v1_embeddings_request,
             image_embeddings_idx,
-        ) = AzureAICohereConfig()._transform_request(
-            input=input, optional_params=optional_params, model=model
-        )
+        ) = AzureAICohereConfig()._transform_request(input=input, optional_params=optional_params, model=model)
 
         image_embedding_responses: Optional[List] = None
         text_embedding_responses: Optional[List] = None
@@ -270,11 +271,7 @@ class AzureAIEmbedding(OpenAIChatCompletion):
                 optional_params,
                 api_key,
                 api_base,
-                client=(
-                    client
-                    if client is not None and isinstance(client, OpenAI)
-                    else None
-                ),
+                client=(client if client is not None and isinstance(client, OpenAI) else None),
                 aembedding=aembedding,
                 shared_session=shared_session,
             )
