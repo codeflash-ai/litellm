@@ -44,6 +44,7 @@ else:
 
 
 class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
+
     def __init__(self, **kwargs):
         BaseConfig.__init__(self, **kwargs)
         BaseAWSLLM.__init__(self, **kwargs)
@@ -233,8 +234,15 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
             verbose_logger.debug(f"Response dict: {response_dict}")
 
             # Use the same response shape parsing as the existing decoder
+
+            # Avoid calling self._get_response_stream_shape() repeatedly inside hot loop
+            # Also, pre-fetch shape once and reuse
+            if AmazonInvokeAgentConfig._response_stream_shape is None:
+                AmazonInvokeAgentConfig._response_stream_shape = self._get_response_stream_shape()
+            response_stream_shape = AmazonInvokeAgentConfig._response_stream_shape
+
             parsed_response = parser.parse(
-                response_dict, self._get_response_stream_shape()
+                response_dict, response_stream_shape
             )
             verbose_logger.debug(f"Parsed response: {parsed_response}")
 
@@ -257,8 +265,9 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
                     ),
                 )
 
-            if "chunk" in parsed_response:
-                chunk = parsed_response.get("chunk")
+            # Only check for "chunk" key if likely present, otherwise fallback
+            chunk = parsed_response.get("chunk") if "chunk" in parsed_response else None
+            if chunk is not None:
                 if not chunk:
                     return None
                 return chunk.get("bytes").decode()
@@ -294,9 +303,8 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
         """Get the response stream shape for parsing, reusing existing logic."""
         try:
             # Try to reuse the cached shape from the existing decoder
-            from litellm.llms.bedrock.chat.invoke_handler import (
-                get_response_stream_shape,
-            )
+            from litellm.llms.bedrock.chat.invoke_handler import \
+                get_response_stream_shape
 
             return get_response_stream_shape()
         except ImportError:
