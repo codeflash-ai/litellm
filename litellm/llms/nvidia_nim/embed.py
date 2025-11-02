@@ -39,21 +39,24 @@ class NvidiaNimEmbeddingConfig:
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        # Snapshot __dict__ up front for faster repeated access
+        cls_dict = cls.__dict__
+        # Use set for disallowed types for quicker type checks
+        disallowed_types = (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            classmethod,
+            staticmethod,
+        )
+        # Hoist method lookup out of loop for optimization
+        startswith = str.startswith
+        isinstance_ = isinstance
+
+        result = {}
+        for k, v in cls_dict.items():
+            if not startswith(k, "__") and not isinstance_(v, disallowed_types) and v is not None:
+                result[k] = v
+        return result
 
     def get_supported_openai_params(
         self,
