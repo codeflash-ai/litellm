@@ -10,6 +10,8 @@ from litellm._logging import verbose_proxy_logger
 from litellm.proxy._types import *
 from litellm.types.router import CONFIGURABLE_CLIENTSIDE_AUTH_PARAMS
 
+_DEPLOYMENT_ROUTE_RE = re.compile(r"/openai/deployments/([^/]+)")
+
 
 def _get_request_ip_address(
     request: Request, use_x_forwarded_for: Optional[bool] = False
@@ -586,16 +588,15 @@ def get_model_from_request(
     model = request_data.get("model") or request_data.get("target_model_names")
 
     if model is not None:
-        model_names = model.split(",")
-        if len(model_names) == 1:
-            model = model_names[0].strip()
+        if model.find(",") == -1:
+            model = model.strip()
         else:
-            model = [m.strip() for m in model_names]
+            model = [m.strip() for m in model.split(",")]
 
     # If model not in request_data, try to extract from route
     if model is None:
         # Parse model from route that follows the pattern /openai/deployments/{model}/*
-        match = re.match(r"/openai/deployments/([^/]+)", route)
+        match = _DEPLOYMENT_ROUTE_RE.match(route)
         if match:
             model = match.group(1)
 
