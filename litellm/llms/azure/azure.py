@@ -1198,7 +1198,13 @@ class AzureChatCompletion(BaseAzureLLM, BaseLLM):
         client=None,
         litellm_params: Optional[dict] = None,
     ) -> HttpxBinaryResponseContent:
-        max_retries = optional_params.pop("max_retries", 2)
+        # Avoid unnecessary dict mutation if 'max_retries' isn't set
+        if 'max_retries' in optional_params:
+            max_retries = optional_params.pop("max_retries")
+        else:
+            max_retries = 2
+
+        # Fast path: defer immediately to async if requested
 
         if aspeech is not None and aspeech is True:
             return self.async_audio_speech(
@@ -1217,15 +1223,22 @@ class AzureChatCompletion(BaseAzureLLM, BaseLLM):
                 litellm_params=litellm_params,
             )  # type: ignore
 
-        azure_client: AzureOpenAI = self.get_azure_openai_client(
-            api_base=api_base,
-            api_version=api_version,
-            api_key=api_key,
-            model=model,
-            _is_async=False,
-            client=client,
-            litellm_params=litellm_params,
-        )  # type: ignore
+        # Optimize: if a client is provided and has correct api_version, use that directly
+        if client is not None:
+            azure_client: AzureOpenAI = client
+            if api_version is not None and isinstance(getattr(azure_client, "_custom_query", None), dict):
+                azure_client._custom_query.setdefault("api-version", api_version)
+        else:
+            azure_client: AzureOpenAI = self.get_azure_openai_client(
+                api_base=api_base,
+                api_version=api_version,
+                api_key=api_key,
+                model=model,
+                _is_async=False,
+                client=client,
+                litellm_params=litellm_params,
+            )  # type: ignore
+
 
         response = azure_client.audio.speech.create(
             model=model,
@@ -1251,15 +1264,22 @@ class AzureChatCompletion(BaseAzureLLM, BaseLLM):
         client=None,
         litellm_params: Optional[dict] = None,
     ) -> HttpxBinaryResponseContent:
-        azure_client: AsyncAzureOpenAI = self.get_azure_openai_client(
-            api_base=api_base,
-            api_version=api_version,
-            api_key=api_key,
-            model=model,
-            _is_async=True,
-            client=client,
-            litellm_params=litellm_params,
-        )  # type: ignore
+        # Optimize: if a client is provided and has correct api_version, use that directly
+        if client is not None:
+            azure_client: AsyncAzureOpenAI = client
+            if api_version is not None and isinstance(getattr(azure_client, "_custom_query", None), dict):
+                azure_client._custom_query.setdefault("api-version", api_version)
+        else:
+            azure_client: AsyncAzureOpenAI = self.get_azure_openai_client(
+                api_base=api_base,
+                api_version=api_version,
+                api_key=api_key,
+                model=model,
+                _is_async=True,
+                client=client,
+                litellm_params=litellm_params,
+            )  # type: ignore
+
 
         azure_response = await azure_client.audio.speech.create(
             model=model,
