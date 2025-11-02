@@ -43,9 +43,7 @@ def _read_opik_config_file() -> Dict[str, str]:
     config = configparser.ConfigParser()
     config.read(config_path)
 
-    config_values = {
-        section: dict(config.items(section)) for section in config.sections()
-    }
+    config_values = {section: dict(config.items(section)) for section in config.sections()}
 
     if "opik" in config_values:
         return config_values["opik"]
@@ -100,11 +98,21 @@ def create_usage_object(usage):
 
 
 def _remove_nulls(x):
-    x_ = {k: v for k, v in x.items() if v is not None}
+    # Direct loop implementation for lower overhead and less intermediate objects
+    x_ = {}
+    for k, v in x.items():
+        if v is not None:
+            x_[k] = v
     return x_
 
 
 def get_traces_and_spans_from_payload(payload: List):
-    traces = [_remove_nulls(x) for x in payload if "type" not in x]
-    spans = [_remove_nulls(x) for x in payload if "type" in x]
+    # Single-pass partition for faster processing and lower memory churn
+    traces = []
+    spans = []
+    for x in payload:
+        if "type" in x:
+            spans.append(_remove_nulls(x))
+        else:
+            traces.append(_remove_nulls(x))
     return traces, spans
