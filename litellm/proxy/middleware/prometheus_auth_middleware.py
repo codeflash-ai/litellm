@@ -32,10 +32,7 @@ class PrometheusAuthMiddleware(BaseHTTPMiddleware):
                 try:
                     await user_api_key_auth(
                         request=request,
-                        api_key=request.headers.get(
-                            SpecialHeaders.openai_authorization.value
-                        )
-                        or "",
+                        api_key=request.headers.get(SpecialHeaders.openai_authorization.value) or "",
                     )
                 except Exception as e:
                     return JSONResponse(
