@@ -12,6 +12,7 @@ class DeepInfraConfig(OpenAIGPTConfig):
 
     The class `DeepInfra` provides configuration for the DeepInfra's Chat Completions API interface. Below are the parameters:
     """
+
     @property
     def custom_llm_provider(self) -> Optional[str]:
         return "deepinfra"
@@ -46,17 +47,40 @@ class DeepInfraConfig(OpenAIGPTConfig):
         tools: Optional[list] = None,
         tool_choice: Optional[Union[str, dict]] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Assign only non-None values as instance attributes
+        if frequency_penalty is not None:
+            self.frequency_penalty = frequency_penalty
+        if function_call is not None:
+            self.function_call = function_call
+        if functions is not None:
+            self.functions = functions
+        if logit_bias is not None:
+            self.logit_bias = logit_bias
+        if max_tokens is not None:
+            self.max_tokens = max_tokens
+        if n is not None:
+            self.n = n
+        if presence_penalty is not None:
+            self.presence_penalty = presence_penalty
+        if stop is not None:
+            self.stop = stop
+        if temperature is not None:
+            self.temperature = temperature
+        if top_p is not None:
+            self.top_p = top_p
+        if response_format is not None:
+            self.response_format = response_format
+        if tools is not None:
+            self.tools = tools
+        if tool_choice is not None:
+            self.tool_choice = tool_choice
 
     @classmethod
     def get_config(cls):
         return super().get_config()
 
     def get_supported_openai_params(self, model: str):
-        supported_openai_params = [
+        supported_openai_params = (
             "stream",
             "frequency_penalty",
             "function_call",
@@ -71,15 +95,17 @@ class DeepInfraConfig(OpenAIGPTConfig):
             "top_p",
             "response_format",
             "tools",
-            "tool_choice"
-        ]
+            "tool_choice",
+        )
+
+        params = list(supported_openai_params)
 
         if litellm.supports_reasoning(
             model=model,
-            custom_llm_provider=self.custom_llm_provider,
+            custom_llm_provider=getattr(self, "custom_llm_provider", None),
         ):
-            supported_openai_params.append("reasoning_effort")
-        return supported_openai_params
+            params.append("reasoning_effort")
+        return params
 
     def map_openai_params(
         self,
@@ -91,15 +117,11 @@ class DeepInfraConfig(OpenAIGPTConfig):
         supported_openai_params = self.get_supported_openai_params(model=model)
         for param, value in non_default_params.items():
             if (
-                param == "temperature"
-                and value == 0
-                and model == "mistralai/Mistral-7B-Instruct-v0.1"
+                param == "temperature" and value == 0 and model == "mistralai/Mistral-7B-Instruct-v0.1"
             ):  # this model does no support temperature == 0
                 value = MIN_NON_ZERO_TEMPERATURE  # close to 0
             if param == "tool_choice":
-                if (
-                    value != "auto" and value != "none"
-                ):  # https://deepinfra.com/docs/advanced/function_calling
+                if value != "auto" and value != "none":  # https://deepinfra.com/docs/advanced/function_calling
                     ## UNSUPPORTED TOOL CHOICE VALUE
                     if litellm.drop_params is True or drop_params is True:
                         value = None
@@ -121,10 +143,6 @@ class DeepInfraConfig(OpenAIGPTConfig):
         self, api_base: Optional[str], api_key: Optional[str]
     ) -> Tuple[Optional[str], Optional[str]]:
         # deepinfra is openai compatible, we just need to set this to custom_openai and have the api_base be https://api.endpoints.anyscale.com/v1
-        api_base = (
-            api_base
-            or get_secret_str("DEEPINFRA_API_BASE")
-            or "https://api.deepinfra.com/v1/openai"
-        )
+        api_base = api_base or get_secret_str("DEEPINFRA_API_BASE") or "https://api.deepinfra.com/v1/openai"
         dynamic_api_key = api_key or get_secret_str("DEEPINFRA_API_KEY")
         return api_base, dynamic_api_key
