@@ -120,12 +120,27 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         top_p: Optional[int] = None,
         response_format: Optional[dict] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Only set attributes for arguments that are not None
+        # Access __dict__ directly for a faster locals() equivalent
+        attrs = (
+            ("frequency_penalty", frequency_penalty),
+            ("function_call", function_call),
+            ("functions", functions),
+            ("logit_bias", logit_bias),
+            ("max_tokens", max_tokens),
+            ("n", n),
+            ("presence_penalty", presence_penalty),
+            ("stop", stop),
+            ("temperature", temperature),
+            ("top_p", top_p),
+            ("response_format", response_format),
+        )
+        cls = self.__class__
+        for key, value in attrs:
+            if value is not None:
+                setattr(cls, key, value)
 
-        self.__class__._is_base_class = False
+        cls._is_base_class = False
 
     @classmethod
     def get_config(cls):
@@ -215,13 +230,11 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         )
 
     def contains_pdf_url(self, content_item: ChatCompletionFileObjectFile) -> bool:
-        potential_pdf_url_starts = ["https://", "http://", "www."]
         file_id = content_item.get("file_id")
-        if file_id and any(
-            file_id.startswith(start) for start in potential_pdf_url_starts
-        ):
-            return True
-        return False
+        if not file_id:
+            return False
+        # Avoid creating a list every call; tuple is slightly faster for startswith
+        return file_id.startswith(("https://", "http://", "www."))
 
     def _handle_pdf_url(
         self, content_item: ChatCompletionFileObjectFile
