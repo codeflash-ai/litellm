@@ -352,25 +352,60 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
 
         response_model: Optional[str] = None
 
+
+        # Localize method references for faster attribute access in loop
+        _is_trace_event = self._is_trace_event
+        _get_trace_data = self._get_trace_data
+        _extract_and_update_preprocessing_usage = self._extract_and_update_preprocessing_usage
+        _extract_orchestration_model = self._extract_orchestration_model
+        logger_debug = verbose_logger.debug
+
+        # Use variable lookup and reduce method attribute lookup in the hot loop
         for event in events:
-            if not self._is_trace_event(event):
+            # Inline the most expensive part: _is_trace_event
+            headers = event.get("headers", {})
+            event_type = headers.get("event_type")
+            payload = event.get("payload")
+            if event_type != "trace" or payload is None:
                 continue
 
-            trace_data = self._get_trace_data(event)
+            # Inline _get_trace_data
+            trace_payload: InvokeAgentTracePayload = payload  # type: ignore
+            trace_data = trace_payload.get("trace", {})
             if not trace_data:
                 continue
 
-            verbose_logger.debug(f"Trace event: {trace_data}")
+            logger_debug(f"Trace event: {trace_data}")
 
-            # Extract usage from pre-processing trace
-            self._extract_and_update_preprocessing_usage(
-                trace_data=trace_data,
-                usage_info=usage_info,
-            )
+            # Inline _extract_and_update_preprocessing_usage
+            pre_processing: Optional[InvokeAgentPreProcessingTrace] = trace_data.get("preProcessingTrace")
+            if pre_processing:
+                model_output: Optional[InvokeAgentModelInvocationOutput] = pre_processing.get("modelInvocationOutput")
+                if not model_output:
+                    model_output = InvokeAgentModelInvocationOutput()
+                if model_output:
+                    metadata: Optional[InvokeAgentMetadata] = model_output.get("metadata")
+                    if not metadata:
+                        metadata = InvokeAgentMetadata()
+                    if metadata:
+                        usage: Optional[Union[InvokeAgentUsage, Dict]] = metadata.get("usage", {})
+                        if usage:
+                            usage_info["inputTokens"] += usage.get("inputTokens", 0)
+                            usage_info["outputTokens"] += usage.get("outputTokens", 0)
+
+            # Delay orchestration model extraction till first occurrence only (unchanged logic)
 
             # Extract model from orchestration trace
             if response_model is None:
-                response_model = self._extract_orchestration_model(trace_data)
+                # Inline _extract_orchestration_model
+                orchestration_trace: Optional[InvokeAgentOrchestrationTrace] = trace_data.get("orchestrationTrace")
+                if orchestration_trace:
+                    model_invocation: Optional[InvokeAgentModelInvocationInput] = orchestration_trace.get("modelInvocationInput")
+                    if not model_invocation:
+                        model_invocation = InvokeAgentModelInvocationInput()
+                    if model_invocation:
+                        response_model = model_invocation.get("foundationModel")
+
 
         usage_info["model"] = response_model
         return usage_info
@@ -395,22 +430,15 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
         self, trace_data: InvokeAgentTrace, usage_info: InvokeAgentUsage
     ) -> None:
         """Extract usage information from preprocessing trace."""
-        pre_processing: Optional[InvokeAgentPreProcessingTrace] = trace_data.get(
-            "preProcessingTrace"
-        )
+        pre_processing: Optional[InvokeAgentPreProcessingTrace] = trace_data.get("preProcessingTrace")
         if not pre_processing:
             return
 
-        model_output: Optional[InvokeAgentModelInvocationOutput] = (
-            pre_processing.get("modelInvocationOutput")
-            or InvokeAgentModelInvocationOutput()
-        )
+        model_output: Optional[InvokeAgentModelInvocationOutput] = pre_processing.get("modelInvocationOutput") or InvokeAgentModelInvocationOutput()
         if not model_output:
             return
 
-        metadata: Optional[InvokeAgentMetadata] = (
-            model_output.get("metadata") or InvokeAgentMetadata()
-        )
+        metadata: Optional[InvokeAgentMetadata] = model_output.get("metadata") or InvokeAgentMetadata()
         if not metadata:
             return
 
@@ -425,16 +453,11 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
         self, trace_data: InvokeAgentTrace
     ) -> Optional[str]:
         """Extract model information from orchestration trace."""
-        orchestration_trace: Optional[InvokeAgentOrchestrationTrace] = trace_data.get(
-            "orchestrationTrace"
-        )
+        orchestration_trace: Optional[InvokeAgentOrchestrationTrace] = trace_data.get("orchestrationTrace")
         if not orchestration_trace:
             return None
 
-        model_invocation: Optional[InvokeAgentModelInvocationInput] = (
-            orchestration_trace.get("modelInvocationInput")
-            or InvokeAgentModelInvocationInput()
-        )
+        model_invocation: Optional[InvokeAgentModelInvocationInput] = orchestration_trace.get("modelInvocationInput") or InvokeAgentModelInvocationInput()
         if not model_invocation:
             return None
 
