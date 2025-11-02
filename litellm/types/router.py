@@ -758,18 +758,25 @@ class MockRouterTestingParams:
     def from_kwargs(cls, kwargs: dict) -> "MockRouterTestingParams":
         from litellm.secret_managers.main import str_to_bool
 
-        def extract_bool_param(name: str) -> Optional[bool]:
-            value = kwargs.pop(name, None)
-            return str_to_bool(value) if isinstance(value, str) else value
+        # Avoid inner function call overhead, flatten logic for minimal indirection
+        # Save pop results in local variables (to avoid repeated dictionary pops)
+        mock_testing_fallbacks = kwargs.pop("mock_testing_fallbacks", None)
+        if isinstance(mock_testing_fallbacks, str):
+            mock_testing_fallbacks = str_to_bool(mock_testing_fallbacks)
+
+        mock_testing_context_fallbacks = kwargs.pop("mock_testing_context_fallbacks", None)
+        if isinstance(mock_testing_context_fallbacks, str):
+            mock_testing_context_fallbacks = str_to_bool(mock_testing_context_fallbacks)
+
+        mock_testing_content_policy_fallbacks = kwargs.pop("mock_testing_content_policy_fallbacks", None)
+        if isinstance(mock_testing_content_policy_fallbacks, str):
+            mock_testing_content_policy_fallbacks = str_to_bool(mock_testing_content_policy_fallbacks)
+
 
         return cls(
-            mock_testing_fallbacks=extract_bool_param("mock_testing_fallbacks"),
-            mock_testing_context_fallbacks=extract_bool_param(
-                "mock_testing_context_fallbacks"
-            ),
-            mock_testing_content_policy_fallbacks=extract_bool_param(
-                "mock_testing_content_policy_fallbacks"
-            ),
+            mock_testing_fallbacks=mock_testing_fallbacks,
+            mock_testing_context_fallbacks=mock_testing_context_fallbacks,
+            mock_testing_content_policy_fallbacks=mock_testing_content_policy_fallbacks,
         )
 
 
