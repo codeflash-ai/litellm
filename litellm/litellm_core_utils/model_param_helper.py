@@ -34,7 +34,7 @@ class ModelParamHelper:
 
     @staticmethod
     def get_exclude_params_for_model_parameters() -> Set[str]:
-        return set(["messages", "prompt", "input"])
+        return {"messages", "prompt", "input"}
 
     @staticmethod
     def _get_relevant_args_to_use_for_logging() -> Set[str]:
