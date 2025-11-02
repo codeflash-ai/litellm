@@ -18,6 +18,13 @@ class ChatClient:
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
 
+        # Precompute headers to avoid recreating dict on each call
+        self._headers = {"Content-Type": "application/json"}
+        if api_key:
+            self._headers["Authorization"] = f"Bearer {api_key}"
+        # Reuse session to avoid TCP/TLS connection overhead
+        self._session = requests.Session()
+
     def _get_headers(self) -> Dict[str, str]:
         """
         Get the headers for API requests, including authorization if api_key is set.
@@ -25,10 +32,8 @@ class ChatClient:
         Returns:
             Dict[str, str]: Headers to use for API requests
         """
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
+        # Return cached headers directly (they are not mutated by users)
+        return self._headers
 
     def completions(
         self,
@@ -93,9 +98,8 @@ class ChatClient:
             return request
 
         # Prepare and send the request
-        session = requests.Session()
         try:
-            response = session.send(request.prepare())
+            response = self._session.send(request.prepare())
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
@@ -139,11 +143,7 @@ class ChatClient:
         url = f"{self._base_url}/chat/completions"
 
         # Build request data with required fields
-        data: Dict[str, Any] = {
-            "model": model, 
-            "messages": messages,
-            "stream": True
-        }
+        data: Dict[str, Any] = {"model": model, "messages": messages, "stream": True}
 
         # Add optional parameters if provided
         if temperature is not None:
@@ -164,28 +164,23 @@ class ChatClient:
         # Make streaming request
         session = requests.Session()
         try:
-            response = session.post(
-                url, 
-                headers=self._get_headers(), 
-                json=data, 
-                stream=True
-            )
+            response = session.post(url, headers=self._get_headers(), json=data, stream=True)
             response.raise_for_status()
-            
+
             # Parse SSE stream
             for line in response.iter_lines():
                 if line:
-                    line = line.decode('utf-8')
-                    if line.startswith('data: '):
+                    line = line.decode("utf-8")
+                    if line.startswith("data: "):
                         data_str = line[6:]  # Remove 'data: ' prefix
-                        if data_str.strip() == '[DONE]':
+                        if data_str.strip() == "[DONE]":
                             break
                         try:
                             chunk = json.loads(data_str)
                             yield chunk
                         except json.JSONDecodeError:
                             continue
-                            
+
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise UnauthorizedError(e)
