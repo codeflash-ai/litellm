@@ -686,25 +686,35 @@ async def get_otel_spans():
     else:
         recorded_spans = []
 
-    print("Spans: ", recorded_spans)  # noqa
-
     most_recent_parent = None
     most_recent_start_time = 1000000
     spans_grouped_by_parent = {}
+
+    # Reduce attribute lookups by localizing frequently accessed attributes
+    # and process span names during the loop to avoid an extra loop
+    span_names = []
+    append_span_name = span_names.append
+    get_spans_group = spans_grouped_by_parent.get
+
+    # Pre-bind spans_grouped_by_parent for low-level performance
     for span in recorded_spans:
-        if span.parent is not None:
-            parent_trace_id = span.parent.trace_id
-            if parent_trace_id not in spans_grouped_by_parent:
-                spans_grouped_by_parent[parent_trace_id] = []
-            spans_grouped_by_parent[parent_trace_id].append(span.name)
+        span_name = span.name
+        append_span_name(span_name)
+        parent = span.parent
+        if parent is not None:
+            parent_trace_id = parent.trace_id
+            group = get_spans_group(parent_trace_id)
+            if group is None:
+                group = []
+                spans_grouped_by_parent[parent_trace_id] = group
+            group.append(span_name)
 
             # check time of span
-            if span.start_time > most_recent_start_time:
+            span_start_time = span.start_time
+            if span_start_time > most_recent_start_time:
                 most_recent_parent = parent_trace_id
-                most_recent_start_time = span.start_time
+                most_recent_start_time = span_start_time
 
-    # these are otel spans - get the span name
-    span_names = [span.name for span in recorded_spans]
     return {
         "otel_spans": span_names,
         "spans_grouped_by_parent": spans_grouped_by_parent,
