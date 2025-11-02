@@ -171,4 +171,4 @@ class ModelParamHelper:
         """
         Get the kwargs to exclude from the cache key
         """
-        return set(["metadata"])
+        return {"metadata"}
