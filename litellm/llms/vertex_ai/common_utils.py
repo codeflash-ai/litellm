@@ -538,13 +538,13 @@ def _convert_schema_types(schema, depth=0):
             f"Max depth of {DEFAULT_MAX_RECURSE_DEPTH} exceeded while processing schema. Please check the schema for excessive nesting."
         )
     
-    if not isinstance(schema, dict):
+    if type(schema) is not dict:
         return
 
     
     # Handle type field
-    if "type" in schema:
-        type_val = schema["type"]
+    type_val = schema.get("type")
+    if type_val is not None:
         if isinstance(type_val, list) and len(type_val) > 1:
             # Convert ["string", "number"] -> {"anyOf": [{"type": "STRING"}, {"type": "NUMBER"}]}
             schema["anyOf"] = [{"type": t} for t in type_val if isinstance(t, str)]
@@ -555,17 +555,18 @@ def _convert_schema_types(schema, depth=0):
             schema["type"] = type_val
     
     # Recursively process nested properties, items, and anyOf
-    for key in ["properties", "items", "anyOf"]:
-        if key in schema:
-            value = schema[key]
-            if key == "properties" and isinstance(value, dict):
-                for prop_schema in value.values():
-                    _convert_schema_types(prop_schema, depth + 1)
-            elif key == "items":
-                _convert_schema_types(value, depth + 1)
-            elif key == "anyOf" and isinstance(value, list):
-                for anyof_schema in value:
-                    _convert_schema_types(anyof_schema, depth + 1)
+    if "properties" in schema:
+        value = schema["properties"]
+        if isinstance(value, dict):
+            for prop_schema in value.values():
+                _convert_schema_types(prop_schema, depth + 1)
+    if "items" in schema:
+        _convert_schema_types(schema["items"], depth + 1)
+    if "anyOf" in schema:
+        value = schema["anyOf"]
+        if isinstance(value, list):
+            for anyof_schema in value:
+                _convert_schema_types(anyof_schema, depth + 1)
 
 def get_vertex_project_id_from_url(url: str) -> Optional[str]:
     """
