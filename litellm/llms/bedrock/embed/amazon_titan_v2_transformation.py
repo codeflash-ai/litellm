@@ -38,21 +38,18 @@ class AmazonTitanV2Config:
 
     @classmethod
     def get_config(cls):
-        return {
-            k: v
-            for k, v in cls.__dict__.items()
-            if not k.startswith("__")
-            and not isinstance(
-                v,
-                (
-                    types.FunctionType,
-                    types.BuiltinFunctionType,
-                    classmethod,
-                    staticmethod,
-                ),
-            )
-            and v is not None
-        }
+        cls_dict = cls.__dict__
+        excluded_types = (types.FunctionType, types.BuiltinFunctionType, classmethod, staticmethod)
+        result = {}
+        for k, v in cls_dict.items():
+            if k.startswith("__"):
+                continue
+            if v is None:
+                continue
+            if type(v) in excluded_types or isinstance(v, excluded_types):
+                continue
+            result[k] = v
+        return result
 
     def get_supported_openai_params(self) -> List[str]:
         return ["dimensions", "encoding_format"]
@@ -88,12 +85,10 @@ class AmazonTitanV2Config:
             # Otherwise, use float data from embeddingsByType or fallback to embedding field
             embedding_data: Union[List[float], List[int]]
 
-            if ("embeddingsByType" in _parsed_response and
-                "binary" in _parsed_response["embeddingsByType"]):
+            if "embeddingsByType" in _parsed_response and "binary" in _parsed_response["embeddingsByType"]:
                 # Use binary data if available (for encoding_format="base64")
                 embedding_data = _parsed_response["embeddingsByType"]["binary"]
-            elif ("embeddingsByType" in _parsed_response and
-                  "float" in _parsed_response["embeddingsByType"]):
+            elif "embeddingsByType" in _parsed_response and "float" in _parsed_response["embeddingsByType"]:
                 # Use float data from embeddingsByType
                 embedding_data = _parsed_response["embeddingsByType"]["float"]
             elif "embedding" in _parsed_response:
