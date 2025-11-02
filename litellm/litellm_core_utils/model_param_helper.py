@@ -23,9 +23,7 @@ class ModelParamHelper:
     ) -> dict:
         """ """
         standard_logging_model_parameters: dict = {}
-        supported_model_parameters = (
-            ModelParamHelper._get_relevant_args_to_use_for_logging()
-        )
+        supported_model_parameters = ModelParamHelper._get_relevant_args_to_use_for_logging()
 
         for key, value in model_parameters.items():
             if key in supported_model_parameters:
@@ -53,16 +51,10 @@ class ModelParamHelper:
         """
         Gets the supported kwargs for each call type and combines them
         """
-        chat_completion_kwargs = (
-            ModelParamHelper._get_litellm_supported_chat_completion_kwargs()
-        )
-        text_completion_kwargs = (
-            ModelParamHelper._get_litellm_supported_text_completion_kwargs()
-        )
+        chat_completion_kwargs = ModelParamHelper._get_litellm_supported_chat_completion_kwargs()
+        text_completion_kwargs = ModelParamHelper._get_litellm_supported_text_completion_kwargs()
         embedding_kwargs = ModelParamHelper._get_litellm_supported_embedding_kwargs()
-        transcription_kwargs = (
-            ModelParamHelper._get_litellm_supported_transcription_kwargs()
-        )
+        transcription_kwargs = ModelParamHelper._get_litellm_supported_transcription_kwargs()
         rerank_kwargs = ModelParamHelper._get_litellm_supported_rerank_kwargs()
         exclude_kwargs = ModelParamHelper._get_exclude_kwargs()
 
@@ -86,18 +78,14 @@ class ModelParamHelper:
 
         This follows the OpenAI API Spec
         """
-        non_streaming_params: Set[str] = set(
-            getattr(CompletionCreateParamsNonStreaming, "__annotations__", {}).keys()
+        non_streaming_params: Set[str] = set(getattr(CompletionCreateParamsNonStreaming, "__annotations__", {}).keys())
+        streaming_params: Set[str] = set(getattr(CompletionCreateParamsStreaming, "__annotations__", {}).keys())
+        litellm_provider_specific_params: Set[
+            str
+        ] = ModelParamHelper.get_litellm_provider_specific_params_for_chat_params()
+        all_chat_completion_kwargs: Set[str] = non_streaming_params.union(streaming_params).union(
+            litellm_provider_specific_params
         )
-        streaming_params: Set[str] = set(
-            getattr(CompletionCreateParamsStreaming, "__annotations__", {}).keys()
-        )
-        litellm_provider_specific_params: Set[str] = (
-            ModelParamHelper.get_litellm_provider_specific_params_for_chat_params()
-        )
-        all_chat_completion_kwargs: Set[str] = non_streaming_params.union(
-            streaming_params
-        ).union(litellm_provider_specific_params)
         return all_chat_completion_kwargs
 
     @staticmethod
@@ -108,16 +96,8 @@ class ModelParamHelper:
         This follows the OpenAI API Spec
         """
         all_text_completion_kwargs = set(
-            getattr(
-                TextCompletionCreateParamsNonStreaming, "__annotations__", {}
-            ).keys()
-        ).union(
-            set(
-                getattr(
-                    TextCompletionCreateParamsStreaming, "__annotations__", {}
-                ).keys()
-            )
-        )
+            getattr(TextCompletionCreateParamsNonStreaming, "__annotations__", {}).keys()
+        ).union(set(getattr(TextCompletionCreateParamsStreaming, "__annotations__", {}).keys()))
         return all_text_completion_kwargs
 
     @staticmethod
@@ -149,19 +129,19 @@ class ModelParamHelper:
                 TranscriptionCreateParamsStreaming,
             )
 
-            non_streaming_kwargs = set(
-                getattr(
-                    TranscriptionCreateParamsNonStreaming, "__annotations__", {}
-                ).keys()
-            )
-            streaming_kwargs = set(
-                getattr(
-                    TranscriptionCreateParamsStreaming, "__annotations__", {}
-                ).keys()
-            )
+            # Use direct attribute access, as __annotations__ is always present in dataclasses and type-annotated classes
+            non_streaming_ann = getattr(TranscriptionCreateParamsNonStreaming, "__annotations__", None)
+            streaming_ann = getattr(TranscriptionCreateParamsStreaming, "__annotations__", None)
 
-            all_transcription_kwargs = non_streaming_kwargs.union(streaming_kwargs)
-            return all_transcription_kwargs
+            # Avoid unnecessary set constructions: directly update a single set
+            if non_streaming_ann is not None or streaming_ann is not None:
+                all_transcription_kwargs = set()
+                if non_streaming_ann:
+                    all_transcription_kwargs.update(non_streaming_ann)
+                if streaming_ann:
+                    all_transcription_kwargs.update(streaming_ann)
+                return all_transcription_kwargs
+            return set()
         except Exception as e:
             verbose_logger.debug("Error getting transcription kwargs %s", str(e))
             return set()
