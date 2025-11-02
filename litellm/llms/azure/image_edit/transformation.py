@@ -23,11 +23,7 @@ class AzureImageEditConfig(OpenAIImageEditConfig):
             or get_secret_str("AZURE_API_KEY")
         )
 
-        headers.update(
-            {
-                "Authorization": f"Bearer {api_key}",
-            }
-        )
+        headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
     def get_complete_url(
