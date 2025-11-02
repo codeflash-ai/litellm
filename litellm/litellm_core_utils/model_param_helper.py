@@ -125,7 +125,7 @@ class ModelParamHelper:
         """
         Get the litellm supported rerank kwargs
         """
-        return set(RerankRequest.model_fields.keys())
+        return set(RerankRequest.model_fields)
 
     @staticmethod
     def _get_litellm_supported_embedding_kwargs() -> Set[str]:
