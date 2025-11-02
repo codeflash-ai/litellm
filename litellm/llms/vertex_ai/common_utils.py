@@ -12,7 +12,9 @@ from litellm.llms.base_llm.base_utils import BaseLLMModelInfo, BaseTokenCounter
 from litellm.llms.base_llm.chat.transformation import BaseLLMException
 from litellm.types.llms.openai import AllMessageValues
 from litellm.types.llms.vertex_ai import PartType, Schema
-from litellm.types.utils import TokenCountResponse
+from litellm.types.utils import LlmProviders, TokenCountResponse
+
+_VERTEX_AI_VALUE = LlmProviders.VERTEX_AI.value
 
 
 class VertexAIError(BaseLLMException):
@@ -725,8 +727,7 @@ class VertexAITokenCounter(BaseTokenCounter):
         self, 
         custom_llm_provider: Optional[str] = None,
     ) -> bool:
-        from litellm.types.utils import LlmProviders
-        return custom_llm_provider == LlmProviders.VERTEX_AI.value
+        return custom_llm_provider == _VERTEX_AI_VALUE
     
     async def count_tokens(
         self,
