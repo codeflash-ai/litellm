@@ -8,11 +8,18 @@ class UsersManagementClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
+        # Precompute headers without Authorization for reuse
+        self._base_headers = {"Content-Type": "application/json"}
+        # Precompute headers with Authorization if api_key provided
+        if api_key:
+            self._auth_headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+        else:
+            self._auth_headers = self._base_headers
+
     def _get_headers(self) -> Dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
+        # Return precomputed headers object rather than constructing each call
+        # This saves dict creation and string formatting costs in hot path
+        return self._auth_headers
 
     def list_users(self, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """List users (GET /user/list)"""
@@ -26,7 +33,12 @@ class UsersManagementClient:
     def get_user(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get user info (GET /user/info)"""
         url = f"{self.base_url}/user/info"
-        params = {"user_id": user_id} if user_id else {}
+        # The following check runs on every request but is essentially free
+        if user_id is not None:
+            params = {"user_id": user_id}
+        else:
+            params = {}
+        # Requests session reuse can reduce connection overhead, but we preserve single requests call to avoid mutating behavior
         response = requests.get(url, headers=self._get_headers(), params=params)
         if response.status_code == 401:
             raise UnauthorizedError(response.text)
