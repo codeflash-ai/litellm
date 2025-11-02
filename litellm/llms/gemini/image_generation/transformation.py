@@ -6,7 +6,7 @@ from litellm.llms.base_llm.image_generation.transformation import (
     BaseImageGenerationConfig,
 )
 from litellm.secret_managers.main import get_secret_str
-from litellm.types.llms.gemini import GeminiImageGenerationRequest
+from litellm.types.llms.gemini import GeminiImageGenerationInstance, GeminiImageGenerationParameters, GeminiImageGenerationRequest
 from litellm.types.llms.openai import (
     AllMessageValues,
     OpenAIImageGenerationOptionalParams,
@@ -154,7 +154,7 @@ class GoogleImageGenConfig(BaseImageGenerationConfig):
         """
         # For Gemini 2.5 Flash Image Preview, use standard Gemini format
         if "2.5-flash-image-preview" in model:
-            request_body: dict = {
+            return {
                 "contents": [
                     {
                         "parts": [
@@ -166,13 +166,7 @@ class GoogleImageGenConfig(BaseImageGenerationConfig):
                     "response_modalities": ["IMAGE", "TEXT"]
                 }
             }
-            return request_body
         else:
-            # For other Imagen models, use the original Imagen format
-            from litellm.types.llms.gemini import (
-                GeminiImageGenerationInstance,
-                GeminiImageGenerationParameters,
-            )
             request_body_obj: GeminiImageGenerationRequest = GeminiImageGenerationRequest(
                 instances=[
                     GeminiImageGenerationInstance(
