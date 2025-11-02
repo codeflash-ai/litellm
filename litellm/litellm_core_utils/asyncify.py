@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import inspect
 from typing import Awaitable, Callable, Optional
 
 import anyio
@@ -12,9 +13,14 @@ T_Retval = TypeVar("T_Retval")
 
 def function_has_argument(function: Callable, arg_name: str) -> bool:
     """Helper function to check if a function has a specific argument."""
-    import inspect
+    if not hasattr(function_has_argument, "_signature_cache"):
+        function_has_argument._signature_cache = {}
 
-    signature = inspect.signature(function)
+    cache = function_has_argument._signature_cache
+    if function not in cache:
+        cache[function] = inspect.signature(function)
+
+    signature = cache[function]
     return arg_name in signature.parameters
 
 
@@ -45,9 +51,7 @@ def asyncify(
     and returns the result.
     """
 
-    async def wrapper(
-        *args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs
-    ) -> T_Retval:
+    async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_Retval:
         partial_f = functools.partial(function, *args, **kwargs)
 
         # In `v4.1.0` anyio added the `abandon_on_cancel` argument and deprecated the old
