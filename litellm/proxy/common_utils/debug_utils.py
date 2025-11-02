@@ -52,29 +52,35 @@ async def get_active_tasks_stats():
     MAX_TASKS_TO_CHECK = 5000
     # Gather all tasks in this event loop (including this endpoint’s own task).
     all_tasks = asyncio.all_tasks()
+    active_tasks = []
+    append_active = active_tasks.append
 
-    # Filter out tasks that are already done.
-    active_tasks = [t for t in all_tasks if not t.done()]
+    # Inline filtering to avoid creating a full intermediate list unnecessarily.
+    done = asyncio.Future.done
+    for t in all_tasks:
+        if not done(t):
+            append_active(t)
 
-    # Count how many active tasks exist, grouped by coroutine function name.
-    counter = Counter()
-    for idx, task in enumerate(active_tasks):
+    total_active = len(active_tasks)
+    # Avoid Counter object and repeated __qualname__/__name__ lookups by direct dict
+    counter = {}
+    get_coro = asyncio.Task.get_coro
 
-        # reasonable max circuit breaker
-        if idx >= MAX_TASKS_TO_CHECK:
-            break
-        coro = task.get_coro()
-        # Derive a human‐readable name from the coroutine:
-        name = (
-            getattr(coro, "__qualname__", None)
-            or getattr(coro, "__name__", None)
-            or repr(coro)
-        )
-        counter[name] += 1
+    limit = min(total_active, MAX_TASKS_TO_CHECK)
+    for idx in range(limit):
+        task = active_tasks[idx]
+        coro = get_coro(task)
+        name = getattr(coro, "__qualname__", None)
+        if name is None:
+            name = getattr(coro, "__name__", None)
+            if name is None:
+                name = repr(coro)
+        counter[name] = counter.get(name, 0) + 1
+
 
     return {
-        "total_active_tasks": len(active_tasks),
-        "by_name": dict(counter),
+        "total_active_tasks": total_active,
+        "by_name": counter,
     }
 
 
