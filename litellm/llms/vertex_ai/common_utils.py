@@ -326,23 +326,36 @@ def _filter_anyof_fields(schema_dict: Dict[str, Any]) -> Dict[str, Any]:
     Case 2: If additional metadata is present, try to keep it
     E.g. {"anyOf": [{"type": "string"}, {"type": "null"}], "default": "test", "title": "test"} -> {"anyOf": [{"type": "string", "title": "test"}, {"type": "null", "title": "test"}]}
     """
-    title = schema_dict.get("title", None)
-    description = schema_dict.get("description", None)
+    # Fast paths for direct field fetches, reduced number of dict lookups.
+    # Gather what we need with only a few lookups.
+    any_of = schema_dict.get("anyOf")
+    if not (isinstance(schema_dict, dict) and any_of):
+        return schema_dict
 
-    if isinstance(schema_dict, dict) and schema_dict.get("anyOf"):
-        any_of = schema_dict["anyOf"]
-        if (
-            (title or description)
-            and isinstance(any_of, list)
-            and all(isinstance(item, dict) for item in any_of)
-        ):
-            for item in any_of:
-                if title:
+    # Only fetch these if we need them for metadata propagation
+    title = schema_dict.get("title")
+    description = schema_dict.get("description")
+
+    # Check ahead, avoid all() generator: use set comparison with all dicts (faster for large lists)
+    if (title or description) and isinstance(any_of, list):
+        only_dicts = True
+        for item in any_of:
+            if not isinstance(item, dict):
+                only_dicts = False
+                break
+        if only_dicts:
+            if title is not None and description is not None:
+                for item in any_of:
                     item["title"] = title
-                if description:
                     item["description"] = description
-        return {"anyOf": any_of}
-    return schema_dict
+            elif title is not None:
+                for item in any_of:
+                    item["title"] = title
+            elif description is not None:
+                for item in any_of:
+                    item["description"] = description
+
+    return {"anyOf": any_of}
 
 
 def process_items(schema, depth=0):
