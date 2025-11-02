@@ -14,6 +14,8 @@ from litellm.types.llms.openai import AllMessageValues
 from litellm.types.llms.vertex_ai import PartType, Schema
 from litellm.types.utils import TokenCountResponse
 
+_project_location_pattern = re.compile(r"/projects/[^/]+/locations/[^/]+/")
+
 
 class VertexAIError(BaseLLMException):
     def __init__(
@@ -594,11 +596,8 @@ def replace_project_and_location_in_route(
     Replace project and location values in the route with the provided values
     """
     # Replace project and location values while keeping route structure
-    modified_route = re.sub(
-        r"/projects/[^/]+/locations/[^/]+/",
-        f"/projects/{vertex_project}/locations/{vertex_location}/",
-        requested_route,
-    )
+    replacement = f"/projects/{vertex_project}/locations/{vertex_location}/"
+    modified_route = _project_location_pattern.sub(replacement, requested_route)
     return modified_route
 
 
