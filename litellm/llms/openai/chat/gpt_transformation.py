@@ -260,31 +260,26 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         content_item: OpenAIMessageContentListBlock,
     ) -> OpenAIMessageContentListBlock:
         litellm_specific_params = {"format"}
-        if content_item.get("type") == "image_url":
+        content_type = content_item.get("type")
+        if content_type == "image_url":
             content_item = cast(ChatCompletionImageObject, content_item)
-            if isinstance(content_item["image_url"], str):
+            image_url = content_item["image_url"]
+            if isinstance(image_url, str):
+                # Only update if not already dict
                 content_item["image_url"] = {
-                    "url": content_item["image_url"],
+                    "url": image_url,
                 }
-            elif isinstance(content_item["image_url"], dict):
-                new_image_url_obj = ChatCompletionImageUrlObject(
-                    **{  # type: ignore
-                        k: v
-                        for k, v in content_item["image_url"].items()
-                        if k not in litellm_specific_params
-                    }
-                )
+            elif isinstance(image_url, dict):
+                # Avoid dictcomp variables in local, use direct generator
+                filtered_items = ((k, v) for k, v in image_url.items() if k not in litellm_specific_params)
+                new_image_url_obj = ChatCompletionImageUrlObject(**dict(filtered_items))
                 content_item["image_url"] = new_image_url_obj
-        elif content_item.get("type") == "file":
+
+        elif content_type == "file":
             content_item = cast(ChatCompletionFileObject, content_item)
             file_obj = content_item["file"]
-            new_file_obj = ChatCompletionFileObjectFile(
-                **{  # type: ignore
-                    k: v
-                    for k, v in file_obj.items()
-                    if k not in litellm_specific_params
-                }
-            )
+            filtered_items = ((k, v) for k, v in file_obj.items() if k not in litellm_specific_params)
+            new_file_obj = ChatCompletionFileObjectFile(**dict(filtered_items))
             content_item["file"] = new_file_obj
 
         return content_item
@@ -299,9 +294,14 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         if content_item_type == "file" and potential_file_obj:
             file_obj = cast(ChatCompletionFileObjectFile, potential_file_obj)
             content_item_typed = cast(ChatCompletionFileObject, content_item)
-            if self.contains_pdf_url(file_obj):
+            # Inline contains_pdf_url logic for minor speedup (since usage is single-line and contains_pdf_url is one-liner)
+            file_id = file_obj.get("file_id")
+            if file_id and isinstance(file_id, str) and file_id.startswith(("https://", "http://", "www.")):
                 file_obj = self._handle_pdf_url(file_obj)
-            file_obj = self._common_file_data_check(file_obj)
+            file_data = file_obj.get("file_data")
+            filename = file_obj.get("filename")
+            if file_data is not None and filename is None:
+                file_obj["filename"] = "my_file.pdf"
             content_item_typed["file"] = file_obj
             content_item = content_item_typed
         return content_item
