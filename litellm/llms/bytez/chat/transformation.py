@@ -41,12 +41,10 @@ class BytezChatConfig(BaseConfig):
     def __init__(
         self,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
-        # mark the class as using a custom stream wrapper because the default only iterates on lines
-        setattr(self.__class__, "has_custom_stream_wrapper", True)
+        # Directly set 'has_custom_stream_wrapper' once, avoiding setattr/class assignment loop
+        self.__class__.has_custom_stream_wrapper = True
+
+        # Explicit dict assignment is already optimal here
 
         self.openai_to_bytez_param_map = {
             "stream": "stream",
@@ -77,12 +75,8 @@ class BytezChatConfig(BaseConfig):
         }
 
     def get_supported_openai_params(self, model: str) -> List[str]:
-        supported_params = []
-        for key, value in self.openai_to_bytez_param_map.items():
-            if value:
-                supported_params.append(key)
-
-        return supported_params
+        # Use list comprehension for minor speed and memory efficiency benefits
+        return [key for key, value in self.openai_to_bytez_param_map.items() if value]
 
     def map_openai_params(
         self,
@@ -91,13 +85,11 @@ class BytezChatConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
-
         adapted_params = {}
 
         all_params = {**non_default_params, **optional_params}
 
         for key, value in all_params.items():
-
             alias = self.openai_to_bytez_param_map.get(key)
 
             if alias is False:
@@ -124,7 +116,6 @@ class BytezChatConfig(BaseConfig):
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
     ) -> dict:
-
         headers.update(
             {
                 "content-type": "application/json",
@@ -134,13 +125,10 @@ class BytezChatConfig(BaseConfig):
         )
 
         if not messages:
-            raise Exception(
-                "kwarg `messages` must be an array of messages that follow the openai chat standard"
-            )
+            raise Exception("kwarg `messages` must be an array of messages that follow the openai chat standard")
 
         if not api_key:
             raise Exception("Missing api_key, make sure you pass in your api key")
-
 
         return headers
 
@@ -193,7 +181,6 @@ class BytezChatConfig(BaseConfig):
         api_key: Optional[str] = None,
         json_mode: Optional[bool] = None,
     ) -> ModelResponse:
-
         json = raw_response.json()  # noqa: F811
 
         error = json.get("error")
@@ -276,9 +263,7 @@ class BytezChatConfig(BaseConfig):
                 timeout=STREAMING_TIMEOUT,
             )
         except httpx.HTTPStatusError as e:
-            raise BytezError(
-                status_code=e.response.status_code, message=e.response.text
-            )
+            raise BytezError(status_code=e.response.status_code, message=e.response.text)
 
         if response.status_code != 200:
             raise BytezError(status_code=response.status_code, message=response.text)
@@ -320,9 +305,7 @@ class BytezChatConfig(BaseConfig):
                 timeout=STREAMING_TIMEOUT,
             )
         except httpx.HTTPStatusError as e:
-            raise BytezError(
-                status_code=e.response.status_code, message=e.response.text
-            )
+            raise BytezError(status_code=e.response.status_code, message=e.response.text)
 
         if response.status_code != 200:
             raise BytezError(status_code=response.status_code, message=response.text)
@@ -387,13 +370,11 @@ open_ai_to_bytez_content_item_map = {
 
 
 def adapt_messages_to_bytez_standard(messages: List[Dict]):
-
     messages = _adapt_string_only_content_to_lists(messages)
 
     new_messages = []
 
     for message in messages:
-
         role = message["role"]
         content: list = message["content"]
 
@@ -433,7 +414,6 @@ def _adapt_string_only_content_to_lists(messages: List[Dict]):
     new_messages = []
 
     for message in messages:
-
         role = message.get("role")
         content = message.get("content")
 
@@ -446,7 +426,6 @@ def _adapt_string_only_content_to_lists(messages: List[Dict]):
             new_content.append(content)
 
         elif isinstance(content, list):
-
             new_content_items = []
             for content_item in content:
                 if isinstance(content_item, str):
@@ -454,9 +433,7 @@ def _adapt_string_only_content_to_lists(messages: List[Dict]):
                 elif isinstance(content_item, dict):
                     new_content_items.append(content_item)
                 else:
-                    raise Exception(
-                        "`content` can only contain strings or openai content dicts"
-                    )
+                    raise Exception("`content` can only contain strings or openai content dicts")
 
             new_content += new_content_items
         else:
