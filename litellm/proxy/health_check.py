@@ -10,6 +10,20 @@ import litellm
 logger = logging.getLogger(__name__)
 from litellm.constants import HEALTH_CHECK_TIMEOUT_SECONDS
 
+_ILLEGAL_DISPLAY_PARAMS = set(
+    [
+        "messages",
+        "api_key",
+        "prompt",
+        "input",
+        "vertex_credentials",
+        "aws_access_key_id",
+        "aws_secret_access_key",
+    ]
+)
+
+_MINIMAL_DISPLAY_PARAMS = set(["model", "mode_error"])
+
 ILLEGAL_DISPLAY_PARAMS = [
     "messages",
     "api_key",
@@ -37,11 +51,12 @@ def _clean_endpoint_data(endpoint_data: dict, details: Optional[bool] = True):
     Clean the endpoint data for display to users.
     """
     endpoint_data.pop("litellm_logging_obj", None)
-    return (
-        {k: v for k, v in endpoint_data.items() if k not in ILLEGAL_DISPLAY_PARAMS}
-        if details is not False
-        else {k: v for k, v in endpoint_data.items() if k in MINIMAL_DISPLAY_PARAMS}
-    )
+    if details is not False:
+        # Fast-path: filter with set lookup, since ILLEGAL_DISPLAY_PARAMS is small
+        return {k: endpoint_data[k] for k in endpoint_data if k not in _ILLEGAL_DISPLAY_PARAMS}
+    else:
+        # Fast-path for minimal params: only include those keys present in endpoint_data
+        return {k: endpoint_data[k] for k in _MINIMAL_DISPLAY_PARAMS if k in endpoint_data}
 
 
 def filter_deployments_by_id(
@@ -90,9 +105,7 @@ async def _perform_health_check(model_list: list, details: Optional[bool] = True
         litellm_params = model["litellm_params"]
         model_info = model.get("model_info", {})
         mode = model_info.get("mode", None)
-        litellm_params = _update_litellm_params_for_health_check(
-            model_info, litellm_params
-        )
+        litellm_params = _update_litellm_params_for_health_check(model_info, litellm_params)
         timeout = model_info.get("health_check_timeout") or HEALTH_CHECK_TIMEOUT_SECONDS
 
         task = run_with_timeout(
@@ -116,22 +129,16 @@ async def _perform_health_check(model_list: list, details: Optional[bool] = True
         litellm_params = model["litellm_params"]
 
         if isinstance(is_healthy, dict) and "error" not in is_healthy:
-            healthy_endpoints.append(
-                _clean_endpoint_data({**litellm_params, **is_healthy}, details)
-            )
+            healthy_endpoints.append(_clean_endpoint_data({**litellm_params, **is_healthy}, details))
         elif isinstance(is_healthy, dict):
-            unhealthy_endpoints.append(
-                _clean_endpoint_data({**litellm_params, **is_healthy}, details)
-            )
+            unhealthy_endpoints.append(_clean_endpoint_data({**litellm_params, **is_healthy}, details))
         else:
             unhealthy_endpoints.append(_clean_endpoint_data(litellm_params, details))
 
     return healthy_endpoints, unhealthy_endpoints
 
 
-def _update_litellm_params_for_health_check(
-    model_info: dict, litellm_params: dict
-) -> dict:
+def _update_litellm_params_for_health_check(model_info: dict, litellm_params: dict) -> dict:
     """
     Update the litellm params for health check.
 
@@ -162,16 +169,12 @@ async def perform_health_check(
     """
     if not model_list:
         if cli_model:
-            model_list = [
-                {"model_name": cli_model, "litellm_params": {"model": cli_model}}
-            ]
+            model_list = [{"model_name": cli_model, "litellm_params": {"model": cli_model}}]
         else:
             return [], []
 
     if model is not None:
-        _new_model_list = [
-            x for x in model_list if x["litellm_params"]["model"] == model
-        ]
+        _new_model_list = [x for x in model_list if x["litellm_params"]["model"] == model]
         if _new_model_list == []:
             _new_model_list = [x for x in model_list if x["model_name"] == model]
         model_list = _new_model_list
@@ -179,8 +182,6 @@ async def perform_health_check(
     model_list = filter_deployments_by_id(
         model_list=model_list
     )  # filter duplicate deployments (e.g. when model alias'es are used)
-    healthy_endpoints, unhealthy_endpoints = await _perform_health_check(
-        model_list, details
-    )
+    healthy_endpoints, unhealthy_endpoints = await _perform_health_check(model_list, details)
 
     return healthy_endpoints, unhealthy_endpoints
