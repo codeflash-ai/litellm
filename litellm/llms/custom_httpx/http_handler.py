@@ -18,7 +18,7 @@ from litellm.constants import (
     AIOHTTP_CONNECTOR_LIMIT,
     AIOHTTP_KEEPALIVE_TIMEOUT,
     AIOHTTP_TTL_DNS_CACHE,
-    DEFAULT_SSL_CIPHERS
+    DEFAULT_SSL_CIPHERS,
 )
 from litellm.litellm_core_utils.logging_utils import track_llm_api_timing
 from litellm.types.llms.custom_http import *
@@ -81,9 +81,7 @@ def get_ssl_configuration(
     # Get ssl_verify from environment or litellm settings if not provided
     if ssl_verify is None:
         ssl_verify = os.getenv("SSL_VERIFY", litellm.ssl_verify)
-        ssl_verify_bool = (
-            str_to_bool(ssl_verify) if isinstance(ssl_verify, str) else ssl_verify
-        )
+        ssl_verify_bool = str_to_bool(ssl_verify) if isinstance(ssl_verify, str) else ssl_verify
         if ssl_verify_bool is not None:
             ssl_verify = ssl_verify_bool
 
@@ -101,11 +99,11 @@ def get_ssl_configuration(
 
     if ssl_verify is not False:
         custom_ssl_context = ssl.create_default_context(cafile=cafile)
-        
+
         # Optimize SSL handshake performance
         # Set minimum TLS version to 1.2 for better performance
         custom_ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        
+
         # Configure cipher suites for optimal performance
         if ssl_security_level and isinstance(ssl_security_level, str):
             # User provided custom cipher configuration (e.g., via SSL_SECURITY_LEVEL env var)
@@ -160,11 +158,7 @@ def mask_sensitive_info(error_message):
             masked_message = error_message[: key_index + 4] + "[REDACTED_API_KEY]"
         else:
             # Replace the key with redacted value, keeping other parameters
-            masked_message = (
-                error_message[: key_index + 4]
-                + "[REDACTED_API_KEY]"
-                + error_message[next_param:]
-            )
+            masked_message = error_message[: key_index + 4] + "[REDACTED_API_KEY]" + error_message[next_param:]
 
         return masked_message
 
@@ -172,9 +166,7 @@ def mask_sensitive_info(error_message):
 
 
 class MaskedHTTPStatusError(httpx.HTTPStatusError):
-    def __init__(
-        self, original_error, message: Optional[str] = None, text: Optional[str] = None
-    ):
+    def __init__(self, original_error, message: Optional[str] = None, text: Optional[str] = None):
         # Create a new error with the masked URL
         masked_url = mask_sensitive_info(str(original_error.request.url))
         # Create a new error that looks like the original, but with a masked URL
@@ -270,15 +262,16 @@ class AsyncHTTPHandler:
         follow_redirects: Optional[bool] = None,
     ):
         # Set follow_redirects to UseClientDefault if None
-        _follow_redirects = (
-            follow_redirects if follow_redirects is not None else USE_CLIENT_DEFAULT
-        )
+        _follow_redirects = follow_redirects if follow_redirects is not None else USE_CLIENT_DEFAULT
 
         params = params or {}
         params.update(HTTPHandler.extract_query_params(url))
 
         response = await self.client.get(
-            url, params=params, headers=headers, follow_redirects=_follow_redirects  # type: ignore
+            url,
+            params=params,
+            headers=headers,
+            follow_redirects=_follow_redirects,  # type: ignore
         )
         return response
 
@@ -317,9 +310,7 @@ class AsyncHTTPHandler:
             return response
         except (httpx.RemoteProtocolError, httpx.ConnectError):
             # Retry the request with a new session if there is a connection error
-            new_client = self.create_client(
-                timeout=timeout, event_hooks=self.event_hooks
-            )
+            new_client = self.create_client(timeout=timeout, event_hooks=self.event_hooks)
             try:
                 return await self.single_connection_post_request(
                     url=url,
@@ -376,16 +367,20 @@ class AsyncHTTPHandler:
                 timeout = self.timeout
 
             req = self.client.build_request(
-                "PUT", url, data=data, json=json, params=params, headers=headers, timeout=timeout  # type: ignore
+                "PUT",
+                url,
+                data=data,
+                json=json,
+                params=params,
+                headers=headers,
+                timeout=timeout,  # type: ignore
             )
             response = await self.client.send(req)
             response.raise_for_status()
             return response
         except (httpx.RemoteProtocolError, httpx.ConnectError):
             # Retry the request with a new session if there is a connection error
-            new_client = self.create_client(
-                timeout=timeout, event_hooks=self.event_hooks
-            )
+            new_client = self.create_client(timeout=timeout, event_hooks=self.event_hooks)
             try:
                 return await self.single_connection_post_request(
                     url=url,
@@ -436,16 +431,20 @@ class AsyncHTTPHandler:
                 timeout = self.timeout
 
             req = self.client.build_request(
-                "PATCH", url, data=data, json=json, params=params, headers=headers, timeout=timeout  # type: ignore
+                "PATCH",
+                url,
+                data=data,
+                json=json,
+                params=params,
+                headers=headers,
+                timeout=timeout,  # type: ignore
             )
             response = await self.client.send(req)
             response.raise_for_status()
             return response
         except (httpx.RemoteProtocolError, httpx.ConnectError):
             # Retry the request with a new session if there is a connection error
-            new_client = self.create_client(
-                timeout=timeout, event_hooks=self.event_hooks
-            )
+            new_client = self.create_client(timeout=timeout, event_hooks=self.event_hooks)
             try:
                 return await self.single_connection_post_request(
                     url=url,
@@ -495,16 +494,20 @@ class AsyncHTTPHandler:
             if timeout is None:
                 timeout = self.timeout
             req = self.client.build_request(
-                "DELETE", url, data=data, json=json, params=params, headers=headers, timeout=timeout  # type: ignore
+                "DELETE",
+                url,
+                data=data,
+                json=json,
+                params=params,
+                headers=headers,
+                timeout=timeout,  # type: ignore
             )
             response = await self.client.send(req, stream=stream)
             response.raise_for_status()
             return response
         except (httpx.RemoteProtocolError, httpx.ConnectError):
             # Retry the request with a new session if there is a connection error
-            new_client = self.create_client(
-                timeout=timeout, event_hooks=self.event_hooks
-            )
+            new_client = self.create_client(timeout=timeout, event_hooks=self.event_hooks)
             try:
                 return await self.single_connection_post_request(
                     url=url,
@@ -544,7 +547,13 @@ class AsyncHTTPHandler:
         Used for retrying connection client errors.
         """
         req = client.build_request(
-            "POST", url, data=data, json=json, params=params, headers=headers, content=content  # type: ignore
+            "POST",
+            url,
+            data=data,
+            json=json,
+            params=params,
+            headers=headers,
+            content=content,  # type: ignore
         )
         response = await client.send(req, stream=stream)
         response.raise_for_status()
@@ -663,9 +672,7 @@ class AsyncHTTPHandler:
         from litellm.llms.custom_httpx.aiohttp_transport import LiteLLMAiohttpTransport
         from litellm.secret_managers.main import str_to_bool
 
-        connector_kwargs = AsyncHTTPHandler._get_ssl_connector_kwargs(
-            ssl_verify=ssl_verify, ssl_context=ssl_context
-        )
+        connector_kwargs = AsyncHTTPHandler._get_ssl_connector_kwargs(ssl_verify=ssl_verify, ssl_context=ssl_context)
         #########################################################
         # Check if user enabled aiohttp trust env
         # use for HTTP_PROXY, HTTPS_PROXY, etc.
@@ -678,15 +685,11 @@ class AsyncHTTPHandler:
 
         # Use shared session if provided and valid
         if shared_session is not None and not shared_session.closed:
-            verbose_logger.debug(
-                f"SHARED SESSION: Reusing existing ClientSession (ID: {id(shared_session)})"
-            )
+            verbose_logger.debug(f"SHARED SESSION: Reusing existing ClientSession (ID: {id(shared_session)})")
             return LiteLLMAiohttpTransport(client=shared_session)
 
         # Create new session only if none provided or existing one is invalid
-        verbose_logger.debug(
-            "NEW SESSION: Creating new ClientSession (no shared session provided)"
-        )
+        verbose_logger.debug("NEW SESSION: Creating new ClientSession (no shared session provided)")
         return LiteLLMAiohttpTransport(
             client=lambda: ClientSession(
                 connector=TCPConnector(
@@ -694,7 +697,7 @@ class AsyncHTTPHandler:
                     keepalive_timeout=AIOHTTP_KEEPALIVE_TIMEOUT,
                     ttl_dns_cache=AIOHTTP_TTL_DNS_CACHE,
                     enable_cleanup_closed=True,
-                    **connector_kwargs
+                    **connector_kwargs,
                 ),
                 trust_env=trust_env,
             ),
@@ -759,14 +762,27 @@ class HTTPHandler:
         follow_redirects: Optional[bool] = None,
     ):
         # Set follow_redirects to UseClientDefault if None
-        _follow_redirects = (
-            follow_redirects if follow_redirects is not None else USE_CLIENT_DEFAULT
-        )
-        params = params or {}
-        params.update(self.extract_query_params(url))
+        _follow_redirects = follow_redirects if follow_redirects is not None else USE_CLIENT_DEFAULT
+        # If both params and query string are empty, avoid dict merge
+        if params is None:
+            extracted_params = self.extract_query_params(url)
+            if extracted_params:
+                params = extracted_params
+            else:
+                params = {}
+        else:
+            # Only update if there are query params to add
+            extracted_params = self.extract_query_params(url)
+            if extracted_params:
+                # Avoid mutating incoming dict, only when needed
+                params = params.copy()
+                params.update(extracted_params)
 
         response = self.client.get(
-            url, params=params, headers=headers, follow_redirects=_follow_redirects  # type: ignore
+            url,
+            params=params,
+            headers=headers,
+            follow_redirects=_follow_redirects,  # type: ignore
         )
 
         return response
@@ -812,7 +828,14 @@ class HTTPHandler:
                 )
             else:
                 req = self.client.build_request(
-                    "POST", url, data=data, json=json, params=params, headers=headers, files=files, content=content  # type: ignore
+                    "POST",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,
+                    files=files,
+                    content=content,  # type: ignore
                 )
             response = self.client.send(req, stream=stream)
             response.raise_for_status()
@@ -850,11 +873,22 @@ class HTTPHandler:
         try:
             if timeout is not None:
                 req = self.client.build_request(
-                    "PATCH", url, data=data, json=json, params=params, headers=headers, timeout=timeout  # type: ignore
+                    "PATCH",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,
+                    timeout=timeout,  # type: ignore
                 )
             else:
                 req = self.client.build_request(
-                    "PATCH", url, data=data, json=json, params=params, headers=headers  # type: ignore
+                    "PATCH",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,  # type: ignore
                 )
             response = self.client.send(req, stream=stream)
             response.raise_for_status()
@@ -893,11 +927,22 @@ class HTTPHandler:
         try:
             if timeout is not None:
                 req = self.client.build_request(
-                    "PUT", url, data=data, json=json, params=params, headers=headers, timeout=timeout  # type: ignore
+                    "PUT",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,
+                    timeout=timeout,  # type: ignore
                 )
             else:
                 req = self.client.build_request(
-                    "PUT", url, data=data, json=json, params=params, headers=headers  # type: ignore
+                    "PUT",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,  # type: ignore
                 )
             response = self.client.send(req, stream=stream)
             return response
@@ -923,11 +968,22 @@ class HTTPHandler:
         try:
             if timeout is not None:
                 req = self.client.build_request(
-                    "DELETE", url, data=data, json=json, params=params, headers=headers, timeout=timeout  # type: ignore
+                    "DELETE",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,
+                    timeout=timeout,  # type: ignore
                 )
             else:
                 req = self.client.build_request(
-                    "DELETE", url, data=data, json=json, params=params, headers=headers  # type: ignore
+                    "DELETE",
+                    url,
+                    data=data,
+                    json=json,
+                    params=params,
+                    headers=headers,  # type: ignore
                 )
             response = self.client.send(req, stream=stream)
             response.raise_for_status()
@@ -969,7 +1025,7 @@ class HTTPHandler:
         if litellm.force_ipv4:
             return HTTPTransport(local_address="0.0.0.0")
         else:
-            return getattr(litellm, 'sync_transport', None)
+            return getattr(litellm, "sync_transport", None)
 
 
 def get_async_httpx_client(
@@ -1022,11 +1078,8 @@ def _get_httpx_client(params: Optional[dict] = None) -> HTTPHandler:
     """
     _params_key_name = ""
     if params is not None:
-        for key, value in params.items():
-            try:
-                _params_key_name += f"{key}_{value}"
-            except Exception:
-                pass
+        # More efficient string assembly (avoid += in loop)
+        _params_key_name = "".join(f"{key}_{value}" for key, value in params.items())
 
     _cache_key_name = "httpx_client" + _params_key_name
 
