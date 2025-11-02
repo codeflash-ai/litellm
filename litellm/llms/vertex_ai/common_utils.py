@@ -242,12 +242,10 @@ def _check_text_in_content(parts: List[PartType]) -> bool:
         - 'text' param needs to be len > 0
         - Relevant Issue: https://github.com/BerriAI/litellm/issues/5515
     """
-    has_text_param = False
     for part in parts:
-        if "text" in part and part.get("text"):
-            has_text_param = True
-
-    return has_text_param
+        if part.get("text"):
+            return True
+    return False
 
 
 def _fix_enum_empty_strings(schema, depth=0):
