@@ -9,10 +9,13 @@ class UsersManagementClient:
         self.api_key = api_key
 
     def _get_headers(self) -> Dict[str, str]:
-        headers = {"Content-Type": "application/json"}
         if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
+            return {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            }
+        else:
+            return {"Content-Type": "application/json"}
 
     def list_users(self, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """List users (GET /user/list)"""
@@ -21,7 +24,8 @@ class UsersManagementClient:
         if response.status_code == 401:
             raise UnauthorizedError(response.text)
         response.raise_for_status()
-        return response.json().get("users", response.json())
+        json_response = response.json()
+        return json_response.get("users", json_response)
 
     def get_user(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get user info (GET /user/info)"""
