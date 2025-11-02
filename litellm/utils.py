@@ -204,6 +204,7 @@ from litellm.types.utils import (
     Usage,
     all_litellm_params,
 )
+from litellm._logging import verbose_logger
 
 try:
     # Python 3.9+
@@ -304,6 +305,8 @@ from .types.llms.openai import (
     ChatCompletionToolCallFunctionChunk,
 )
 from .types.router import LiteLLM_Params
+
+_hf_tokenizer_cache = {}
 
 ####### ENVIRONMENT VARIABLES ####################
 # Adjust to your specific application needs / system capabilities.
@@ -481,10 +484,15 @@ def _custom_logger_class_exists_in_failure_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
-    return any(
-        isinstance(cb, type(callback_class))
-        for cb in litellm.failure_callback + litellm._async_failure_callback
-    )
+    cb_type = type(callback_class)
+    # Merge lists efficiently without creating a new list object
+    for cb in litellm.failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    for cb in litellm._async_failure_callback:
+        if isinstance(cb, cb_type):
+            return True
+    return False
 
 
 def get_request_guardrails(kwargs: Dict[str, Any]) -> List[str]:
@@ -1737,22 +1745,34 @@ def _return_openai_tokenizer(model: str) -> SelectTokenizerResponse:
 
 def _return_huggingface_tokenizer(model: str) -> Optional[SelectTokenizerResponse]:
     if model in litellm.cohere_models and "command-r" in model:
-        # cohere
-        cohere_tokenizer = Tokenizer.from_pretrained(
-            "Xenova/c4ai-command-r-v01-tokenizer"
-        )
+        cache_key = "cohere-command-r"
+        if cache_key not in _hf_tokenizer_cache:
+            _hf_tokenizer_cache[cache_key] = Tokenizer.from_pretrained(
+                "Xenova/c4ai-command-r-v01-tokenizer"
+            )
+        cohere_tokenizer = _hf_tokenizer_cache[cache_key]
         return {"type": "huggingface_tokenizer", "tokenizer": cohere_tokenizer}
     # anthropic
     elif model in litellm.anthropic_models and "claude-3" not in model:
-        claude_tokenizer = Tokenizer.from_str(claude_json_str)
+        cache_key = "anthropic-claude"
+        # `claude_json_str` is assumed globally defined, as per internal dependency
+        if cache_key not in _hf_tokenizer_cache:
+            _hf_tokenizer_cache[cache_key] = Tokenizer.from_str(claude_json_str)
+        claude_tokenizer = _hf_tokenizer_cache[cache_key]
         return {"type": "huggingface_tokenizer", "tokenizer": claude_tokenizer}
     # llama2
     elif "llama-2" in model.lower() or "replicate" in model.lower():
-        tokenizer = Tokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        cache_key = "llama-2-tokenizer"
+        if cache_key not in _hf_tokenizer_cache:
+            _hf_tokenizer_cache[cache_key] = Tokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        tokenizer = _hf_tokenizer_cache[cache_key]
         return {"type": "huggingface_tokenizer", "tokenizer": tokenizer}
     # llama3
     elif "llama-3" in model.lower():
-        tokenizer = Tokenizer.from_pretrained("Xenova/llama-3-tokenizer")
+        cache_key = "llama-3-tokenizer"
+        if cache_key not in _hf_tokenizer_cache:
+            _hf_tokenizer_cache[cache_key] = Tokenizer.from_pretrained("Xenova/llama-3-tokenizer")
+        tokenizer = _hf_tokenizer_cache[cache_key]
         return {"type": "huggingface_tokenizer", "tokenizer": tokenizer}
     else:
         return None
