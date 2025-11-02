@@ -17,9 +17,7 @@ class FireworksAIMixin:
     Common Base Config functions across Fireworks AI Endpoints
     """
 
-    def get_error_class(
-        self, error_message: str, status_code: int, headers: Union[dict, Headers]
-    ) -> BaseLLMException:
+    def get_error_class(self, error_message: str, status_code: int, headers: Union[dict, Headers]) -> BaseLLMException:
         return FireworksAIException(
             status_code=status_code,
             message=error_message,
@@ -27,13 +25,18 @@ class FireworksAIMixin:
         )
 
     def _get_api_key(self, api_key: Optional[str]) -> Optional[str]:
-        dynamic_api_key = api_key or (
-            get_secret_str("FIREWORKS_API_KEY")
-            or get_secret_str("FIREWORKS_AI_API_KEY")
-            or get_secret_str("FIREWORKSAI_API_KEY")
-            or get_secret_str("FIREWORKS_AI_TOKEN")
-        )
-        return dynamic_api_key
+        if api_key:
+            return api_key
+        for key in (
+            "FIREWORKS_API_KEY",
+            "FIREWORKS_AI_API_KEY",
+            "FIREWORKSAI_API_KEY",
+            "FIREWORKS_AI_TOKEN",
+        ):
+            secret = get_secret_str(key)
+            if secret:
+                return secret
+        return None
 
     def validate_environment(
         self,
@@ -49,4 +52,4 @@ class FireworksAIMixin:
         if api_key is None:
             raise ValueError("FIREWORKS_API_KEY is not set")
 
-        return {"Authorization": "Bearer {}".format(api_key), **headers}
+        return {"Authorization": f"Bearer {api_key}", **headers}
