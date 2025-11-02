@@ -23,9 +23,7 @@ class ModelParamHelper:
     ) -> dict:
         """ """
         standard_logging_model_parameters: dict = {}
-        supported_model_parameters = (
-            ModelParamHelper._get_relevant_args_to_use_for_logging()
-        )
+        supported_model_parameters = ModelParamHelper._get_relevant_args_to_use_for_logging()
 
         for key, value in model_parameters.items():
             if key in supported_model_parameters:
@@ -53,26 +51,19 @@ class ModelParamHelper:
         """
         Gets the supported kwargs for each call type and combines them
         """
-        chat_completion_kwargs = (
-            ModelParamHelper._get_litellm_supported_chat_completion_kwargs()
-        )
-        text_completion_kwargs = (
-            ModelParamHelper._get_litellm_supported_text_completion_kwargs()
-        )
+        chat_completion_kwargs = ModelParamHelper._get_litellm_supported_chat_completion_kwargs()
+        text_completion_kwargs = ModelParamHelper._get_litellm_supported_text_completion_kwargs()
         embedding_kwargs = ModelParamHelper._get_litellm_supported_embedding_kwargs()
-        transcription_kwargs = (
-            ModelParamHelper._get_litellm_supported_transcription_kwargs()
-        )
+        transcription_kwargs = ModelParamHelper._get_litellm_supported_transcription_kwargs()
         rerank_kwargs = ModelParamHelper._get_litellm_supported_rerank_kwargs()
         exclude_kwargs = ModelParamHelper._get_exclude_kwargs()
 
-        combined_kwargs = chat_completion_kwargs.union(
-            text_completion_kwargs,
-            embedding_kwargs,
-            transcription_kwargs,
-            rerank_kwargs,
-        )
-        combined_kwargs = combined_kwargs.difference(exclude_kwargs)
+        combined_kwargs = chat_completion_kwargs
+        combined_kwargs.update(text_completion_kwargs)
+        combined_kwargs.update(embedding_kwargs)
+        combined_kwargs.update(transcription_kwargs)
+        combined_kwargs.update(rerank_kwargs)
+        combined_kwargs.difference_update(exclude_kwargs)
         return combined_kwargs
 
     @staticmethod
@@ -86,18 +77,14 @@ class ModelParamHelper:
 
         This follows the OpenAI API Spec
         """
-        non_streaming_params: Set[str] = set(
-            getattr(CompletionCreateParamsNonStreaming, "__annotations__", {}).keys()
+        non_streaming_params: Set[str] = set(getattr(CompletionCreateParamsNonStreaming, "__annotations__", {}).keys())
+        streaming_params: Set[str] = set(getattr(CompletionCreateParamsStreaming, "__annotations__", {}).keys())
+        litellm_provider_specific_params: Set[
+            str
+        ] = ModelParamHelper.get_litellm_provider_specific_params_for_chat_params()
+        all_chat_completion_kwargs: Set[str] = non_streaming_params.union(streaming_params).union(
+            litellm_provider_specific_params
         )
-        streaming_params: Set[str] = set(
-            getattr(CompletionCreateParamsStreaming, "__annotations__", {}).keys()
-        )
-        litellm_provider_specific_params: Set[str] = (
-            ModelParamHelper.get_litellm_provider_specific_params_for_chat_params()
-        )
-        all_chat_completion_kwargs: Set[str] = non_streaming_params.union(
-            streaming_params
-        ).union(litellm_provider_specific_params)
         return all_chat_completion_kwargs
 
     @staticmethod
@@ -107,18 +94,10 @@ class ModelParamHelper:
 
         This follows the OpenAI API Spec
         """
-        all_text_completion_kwargs = set(
-            getattr(
-                TextCompletionCreateParamsNonStreaming, "__annotations__", {}
-            ).keys()
-        ).union(
-            set(
-                getattr(
-                    TextCompletionCreateParamsStreaming, "__annotations__", {}
-                ).keys()
-            )
-        )
-        return all_text_completion_kwargs
+        # Combine via direct union of keys
+        ns_keys = getattr(TextCompletionCreateParamsNonStreaming, "__annotations__", {})
+        s_keys = getattr(TextCompletionCreateParamsStreaming, "__annotations__", {})
+        return set(ns_keys).union(s_keys)
 
     @staticmethod
     def _get_litellm_supported_rerank_kwargs() -> Set[str]:
@@ -149,16 +128,8 @@ class ModelParamHelper:
                 TranscriptionCreateParamsStreaming,
             )
 
-            non_streaming_kwargs = set(
-                getattr(
-                    TranscriptionCreateParamsNonStreaming, "__annotations__", {}
-                ).keys()
-            )
-            streaming_kwargs = set(
-                getattr(
-                    TranscriptionCreateParamsStreaming, "__annotations__", {}
-                ).keys()
-            )
+            non_streaming_kwargs = set(getattr(TranscriptionCreateParamsNonStreaming, "__annotations__", {}).keys())
+            streaming_kwargs = set(getattr(TranscriptionCreateParamsStreaming, "__annotations__", {}).keys())
 
             all_transcription_kwargs = non_streaming_kwargs.union(streaming_kwargs)
             return all_transcription_kwargs
@@ -171,4 +142,4 @@ class ModelParamHelper:
         """
         Get the kwargs to exclude from the cache key
         """
-        return set(["metadata"])
+        return {"metadata"}
