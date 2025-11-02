@@ -505,14 +505,18 @@ def get_customer_user_header_from_mapping(user_id_mapping) -> Optional[str]:
     if not user_id_mapping:
         return None
     items = user_id_mapping if isinstance(user_id_mapping, list) else [user_id_mapping]
+    target_role = str(LitellmUserRoles.CUSTOMER).lower()
     for item in items:
         if not isinstance(item, dict):
             continue
-        role = item.get("litellm_user_role")
-        header_name = item.get("header_name")
-        if role is None or not header_name:
+        try:
+            role = item["litellm_user_role"]
+            header_name = item["header_name"]
+        except KeyError:
             continue
-        if str(role).lower() == str(LitellmUserRoles.CUSTOMER).lower():
+        if not header_name:
+            continue
+        if str(role).lower() == target_role:
             return header_name
     return None
 
