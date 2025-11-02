@@ -6,7 +6,7 @@ https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Invoke
 
 import base64
 import json
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
 
 import httpx
 
@@ -23,11 +23,8 @@ from litellm.types.llms.bedrock_invoke_agents import (
     InvokeAgentEvent,
     InvokeAgentEventHeaders,
     InvokeAgentEventList,
-    InvokeAgentMetadata,
     InvokeAgentModelInvocationInput,
-    InvokeAgentModelInvocationOutput,
     InvokeAgentOrchestrationTrace,
-    InvokeAgentPreProcessingTrace,
     InvokeAgentTrace,
     InvokeAgentTracePayload,
     InvokeAgentUsage,
@@ -395,26 +392,17 @@ class AmazonInvokeAgentConfig(BaseConfig, BaseAWSLLM):
         self, trace_data: InvokeAgentTrace, usage_info: InvokeAgentUsage
     ) -> None:
         """Extract usage information from preprocessing trace."""
-        pre_processing: Optional[InvokeAgentPreProcessingTrace] = trace_data.get(
-            "preProcessingTrace"
-        )
+        # Fastpath1: Avoid the or-with-new-object pattern, and stop as soon as a required field is missing.
+        pre_processing = trace_data.get("preProcessingTrace")
         if not pre_processing:
             return
-
-        model_output: Optional[InvokeAgentModelInvocationOutput] = (
-            pre_processing.get("modelInvocationOutput")
-            or InvokeAgentModelInvocationOutput()
-        )
+        model_output = pre_processing.get("modelInvocationOutput")
         if not model_output:
             return
-
-        metadata: Optional[InvokeAgentMetadata] = (
-            model_output.get("metadata") or InvokeAgentMetadata()
-        )
+        metadata = model_output.get("metadata")
         if not metadata:
             return
-
-        usage: Optional[Union[InvokeAgentUsage, Dict]] = metadata.get("usage", {})
+        usage = metadata.get("usage")
         if not usage:
             return
 
