@@ -259,34 +259,30 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         self,
         content_item: OpenAIMessageContentListBlock,
     ) -> OpenAIMessageContentListBlock:
-        litellm_specific_params = {"format"}
         if content_item.get("type") == "image_url":
-            content_item = cast(ChatCompletionImageObject, content_item)
-            if isinstance(content_item["image_url"], str):
-                content_item["image_url"] = {
-                    "url": content_item["image_url"],
+            content_item_type = cast(ChatCompletionImageObject, content_item)
+            image_url_val = content_item_type["image_url"]
+            if isinstance(image_url_val, str):
+                content_item_type["image_url"] = {
+                    "url": image_url_val,
                 }
-            elif isinstance(content_item["image_url"], dict):
-                new_image_url_obj = ChatCompletionImageUrlObject(
-                    **{  # type: ignore
-                        k: v
-                        for k, v in content_item["image_url"].items()
-                        if k not in litellm_specific_params
-                    }
-                )
-                content_item["image_url"] = new_image_url_obj
+            elif isinstance(image_url_val, dict):
+                # Avoid dict comprehension, build subdict directly
+                # There is only one key to remove ("format"), leverage pop if present
+                image_url_obj = image_url_val.copy()
+                image_url_obj.pop("format", None)
+                new_image_url_obj = ChatCompletionImageUrlObject(**image_url_obj)  # type: ignore
+                content_item_type["image_url"] = new_image_url_obj
+            return content_item_type
         elif content_item.get("type") == "file":
-            content_item = cast(ChatCompletionFileObject, content_item)
-            file_obj = content_item["file"]
-            new_file_obj = ChatCompletionFileObjectFile(
-                **{  # type: ignore
-                    k: v
-                    for k, v in file_obj.items()
-                    if k not in litellm_specific_params
-                }
-            )
-            content_item["file"] = new_file_obj
-
+            content_item_type = cast(ChatCompletionFileObject, content_item)
+            file_obj_val = content_item_type["file"]
+            # Remove the "format" key only if present, avoid dict comp
+            file_obj_copy = file_obj_val.copy()
+            file_obj_copy.pop("format", None)
+            new_file_obj = ChatCompletionFileObjectFile(**file_obj_copy)  # type: ignore
+            content_item_type["file"] = new_file_obj
+            return content_item_type
         return content_item
 
     def _transform_content_item(
