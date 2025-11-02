@@ -38,6 +38,8 @@ else:
 
 from litellm.llms.bedrock.base_aws_llm import BaseAWSLLM
 
+_BEDROCK_PROVIDERS = set(get_args(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL))
+
 
 class AmazonInvokeConfig(BaseConfig, BaseAWSLLM):
     def __init__(self, **kwargs):
@@ -509,10 +511,12 @@ class AmazonInvokeConfig(BaseConfig, BaseAWSLLM):
         4. model=us.amazon.nova-pro-v1:0 -> Returns `nova`
         """
         if model.startswith("invoke/"):
-            model = model.replace("invoke/", "", 1)
+            model = model[7:]  # Remove "invoke/" prefix (faster than replace for fixed-length)
 
-        _split_model = model.split(".")[0]
-        if _split_model in get_args(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL):
+        # Fast path: dot-based provider id at start
+        first_dot = model.find(".")
+        _split_model = model if first_dot == -1 else model[:first_dot]
+        if _split_model in _BEDROCK_PROVIDERS:
             return cast(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL, _split_model)
 
         # If not a known provider, check for pattern with two slashes
@@ -524,7 +528,8 @@ class AmazonInvokeConfig(BaseConfig, BaseAWSLLM):
         if "nova" in model:
             return "nova"
 
-        for provider in get_args(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL):
+        # Fallback: substring check for providers
+        for provider in _BEDROCK_PROVIDERS:
             if provider in model:
                 return provider
         return None
@@ -542,11 +547,10 @@ class AmazonInvokeConfig(BaseConfig, BaseAWSLLM):
         Returns:
             Optional[str]: The provider name, or None if no valid provider found
         """
-        parts = model_path.split("/")
-        if len(parts) >= 1:
-            provider = parts[0]
-            if provider in get_args(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL):
-                return cast(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL, provider)
+        slash = model_path.find("/")
+        provider = model_path if slash == -1 else model_path[:slash]
+        if provider in _BEDROCK_PROVIDERS:
+            return cast(litellm.BEDROCK_INVOKE_PROVIDERS_LITERAL, provider)
         return None
 
     def get_bedrock_model_id(
@@ -589,7 +593,13 @@ class AmazonInvokeConfig(BaseConfig, BaseAWSLLM):
         Returns:
             str: The double-encoded model ID.
         """
-        return urllib.parse.quote(model_id, safe="")
+        # Use urllib.parse.quote_from_bytes for slightly faster encoding,
+        # which avoids some checks and conversions in quote.
+        if isinstance(model_id, str):
+            model_id_bytes = model_id.encode('utf-8')
+        else:
+            model_id_bytes = model_id  # If already bytes, just use it
+        return urllib.parse.quote_from_bytes(model_id_bytes, safe="")
 
     def convert_messages_to_prompt(
         self, model, messages, provider, custom_prompt_dict
