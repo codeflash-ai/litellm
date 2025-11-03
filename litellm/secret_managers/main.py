@@ -40,17 +40,12 @@ def str_to_bool(value: Optional[str]) -> Optional[bool]:
     if value is None:
         return None
 
-    true_values = {"true"}
-    false_values = {"false"}
-
     value_lower = value.strip().lower()
-
-    if value_lower in true_values:
+    if value_lower == "true":
         return True
-    elif value_lower in false_values:
+    if value_lower == "false":
         return False
-    else:
-        return None
+    return None
 
 
 def get_secret_str(
