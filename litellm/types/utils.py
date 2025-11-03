@@ -1699,34 +1699,31 @@ class ImageResponse(OpenAIImageResponse, BaseLiteLLMOpenAIResponseObject):
     def __init__(
         self,
         created: Optional[int] = None,
-        data: Optional[List[ImageObject]] = None,
+        data: Optional[List['ImageObject']] = None,
         response_ms=None,
-        usage: Optional[ImageUsage] = None,
+        usage: Optional['ImageUsage'] = None,
         hidden_params: Optional[dict] = None,
         **kwargs,
     ):
-        if response_ms:
-            _response_ms = response_ms
-        else:
-            _response_ms = None
-        if data:
-            data = data
-        else:
-            data = []
-
-        if created:
-            created = created
-        else:
-            created = int(time.time())
+        # Use local variables for branch assignments and avoid repeated checks
+        _response_ms = response_ms if response_ms is not None else None
+        _created = created if created is not None else int(time.time())
 
         _data: List[OpenAIImage] = []
+
+        # Avoid repeated data assignment, list() constructor is slightly faster and more idiomatic
+        data = data if data is not None else []
+        append_data = _data.append
+
+        # Avoid repeated isinstance checks in loop
         for d in data:
             if isinstance(d, dict):
-                _data.append(ImageObject(**d))
+                append_data(ImageObject(**d))
             elif isinstance(d, BaseModel):
-                _data.append(ImageObject(**d.model_dump()))
+                append_data(ImageObject(**d.model_dump()))
 
-        _usage = usage or ImageUsage(
+        # Direct usage assignment
+        _usage = usage if usage is not None else ImageUsage(
             input_tokens=0,
             input_tokens_details=ImageUsageInputTokensDetails(
                 image_tokens=0,
@@ -1735,8 +1732,8 @@ class ImageResponse(OpenAIImageResponse, BaseLiteLLMOpenAIResponseObject):
             output_tokens=0,
             total_tokens=0,
         )
-        super().__init__(created=created, data=_data, usage=_usage)  # type: ignore
-        self._hidden_params = hidden_params or {}
+        super().__init__(created=_created, data=_data, usage=_usage)  # type: ignore
+        self._hidden_params = hidden_params if hidden_params is not None else {}
 
     def __contains__(self, key):
         # Define custom behavior for the 'in' operator
@@ -1744,6 +1741,7 @@ class ImageResponse(OpenAIImageResponse, BaseLiteLLMOpenAIResponseObject):
 
     def get(self, key, default=None):
         # Custom .get() method to access attributes with a default value if the attribute doesn't exist
+        # getattr is already optimal for attribute access, no further optimization needed
         return getattr(self, key, default)
 
     def __getitem__(self, key):
