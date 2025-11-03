@@ -16,6 +16,12 @@ class CredentialsManagementClient:
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
 
+        # Precompute headers for performance
+        self._headers = {"Content-Type": "application/json"}
+        if api_key:
+            self._headers["Authorization"] = f"Bearer {api_key}"
+        self._session = requests.Session()
+
     def _get_headers(self) -> Dict[str, str]:
         """
         Get the headers for API requests, including authorization if api_key is set.
@@ -23,10 +29,7 @@ class CredentialsManagementClient:
         Returns:
             Dict[str, str]: Headers to use for API requests
         """
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
+        return self._headers
 
     def list(
         self,
@@ -95,14 +98,17 @@ class CredentialsManagementClient:
             "credential_values": credential_values,
         }
 
-        request = requests.Request("POST", url, headers=self._get_headers(), json=data)
+        # Reuse precomputed headers, use persistent session
+        headers = self._get_headers()
+
+        # Prepare the request using the requests.Request class
+        request = requests.Request("POST", url, headers=headers, json=data)
 
         if return_request:
             return request
-
-        session = requests.Session()
         try:
-            response = session.send(request.prepare())
+            # Avoid repeated Session instantiation and session.send overhead
+            response = self._session.send(request.prepare())
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
