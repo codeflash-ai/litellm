@@ -123,7 +123,7 @@ def get_vendor_from_model(model: str) -> OCIVendors:
     Returns:
         str: The vendor name.
     """
-    vendor = model.split(".")[0].lower()
+    vendor = model.split(".", 1)[0].lower()
     if vendor == "cohere":
         return OCIVendors.COHERE
     else:
@@ -142,43 +142,49 @@ class OCIChatConfig(BaseConfig):
     def __init__(
         self,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
-        # mark the class as using a custom stream wrapper because the default only iterates on lines
-        setattr(self.__class__, "has_custom_stream_wrapper", True)
+        # Only need to set class attributes once; for performance, avoid copying locals unless needed.
+        # The only attributes possibly getting set are in locals_ (which would only be 'self'), so this can be omitted.
+        # Set 'has_custom_stream_wrapper' on the class.
+        cls = self.__class__
+        if not hasattr(cls, "has_custom_stream_wrapper"):
+            setattr(cls, "has_custom_stream_wrapper", True)
 
-        self.openai_to_oci_generic_param_map = {
-            "stream": "isStream",
-            "max_tokens": "maxTokens",
-            "max_completion_tokens": "maxTokens",
-            "temperature": "temperature",
-            "tools": "tools",
-            "frequency_penalty": "frequencyPenalty",
-            "logprobs": "logProbs",
-            "logit_bias": "logitBias",
-            "n": "numGenerations",
-            "presence_penalty": "presencePenalty",
-            "seed": "seed",
-            "stop": "stop",
-            "tool_choice": "toolChoice",
-            "top_p": "topP",
-            "max_retries": False,
-            "top_logprobs": False,
-            "modalities": False,
-            "prediction": False,
-            "stream_options": False,
-            "function_call": False,
-            "functions": False,
-            "extra_headers": False,
-            "parallel_tool_calls": False,
-            "audio": False,
-            "web_search_options": False,
-        }
+        # OpenAI-to-OCI mapping dictionaries; these can be class-level constants for efficiency.
+        # To avoid mutating class-level dicts between instances, create them as object attributes if they don't already exist.
+        if not hasattr(cls, "openai_to_oci_generic_param_map"):
+            cls.openai_to_oci_generic_param_map = {
+                "stream": "isStream",
+                "max_tokens": "maxTokens",
+                "max_completion_tokens": "maxTokens",
+                "temperature": "temperature",
+                "tools": "tools",
+                "frequency_penalty": "frequencyPenalty",
+                "logprobs": "logProbs",
+                "logit_bias": "logitBias",
+                "n": "numGenerations",
+                "presence_penalty": "presencePenalty",
+                "seed": "seed",
+                "stop": "stop",
+                "tool_choice": "toolChoice",
+                "top_p": "topP",
+                "max_retries": False,
+                "top_logprobs": False,
+                "modalities": False,
+                "prediction": False,
+                "stream_options": False,
+                "function_call": False,
+                "functions": False,
+                "extra_headers": False,
+                "parallel_tool_calls": False,
+                "audio": False,
+                "web_search_options": False,
+            }
+            # Cohere and Gemini use the same param mapping as GENERIC
+            cls.openai_to_oci_cohere_param_map = dict(cls.openai_to_oci_generic_param_map)
 
-        # Cohere and Gemini use the same parameter mapping as GENERIC
-        self.openai_to_oci_cohere_param_map = self.openai_to_oci_generic_param_map.copy()
+        # Instance attributes point to the class-level maps to avoid redundant copies
+        self.openai_to_oci_generic_param_map = cls.openai_to_oci_generic_param_map
+        self.openai_to_oci_cohere_param_map = cls.openai_to_oci_cohere_param_map
 
     def get_supported_openai_params(self, model: str) -> List[str]:
         supported_params = []
@@ -202,30 +208,26 @@ class OCIChatConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
-        adapted_params = {}
         vendor = get_vendor_from_model(model)
         if vendor == OCIVendors.COHERE:
             open_ai_to_oci_param_map = self.openai_to_oci_cohere_param_map
         else:
             open_ai_to_oci_param_map = self.openai_to_oci_generic_param_map
 
-        all_params = {**non_default_params, **optional_params}
-
-        for key, value in all_params.items():
-            alias = open_ai_to_oci_param_map.get(key)
-
-            if alias is False:
-                # Workaround for mypy issue
-                if drop_params or litellm.drop_params:
+        # Merge dicts directly into items without making an intermediate dict
+        # Iterate over both dicts' items in one loop for better memory efficiency
+        adapted_params = {}
+        for params in (non_default_params, optional_params):
+            for key, value in params.items():
+                alias = open_ai_to_oci_param_map.get(key)
+                if alias is False:
+                    if drop_params or litellm.drop_params:
+                        continue
+                    raise Exception(f"param `{key}` is not supported on OCI")
+                if alias is None:
+                    adapted_params[key] = value
                     continue
-                raise Exception(f"param `{key}` is not supported on OCI")
-
-            if alias is None:
-                adapted_params[key] = value
-                continue
-
-            adapted_params[alias] = value
-
+                adapted_params[alias] = value
         return adapted_params
 
     def sign_request(
