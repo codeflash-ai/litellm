@@ -1093,14 +1093,20 @@ def prepare_metadata_fields(
 
     data_json = data.model_dump(exclude_unset=True, exclude_none=True)
 
+
+    # Convert lists to sets once for fast lookup
+    allowed_fields_set = set(LiteLLM_ManagementEndpoint_MetadataFields)
+    premium_fields_set = set(LiteLLM_ManagementEndpoint_MetadataFields_Premium)
+
     try:
         for k, v in data_json.items():
-            if k in LiteLLM_ManagementEndpoint_MetadataFields:
+            if k in allowed_fields_set:
                 if isinstance(v, datetime):
                     casted_metadata[k] = v.isoformat()
                 else:
                     casted_metadata[k] = v
-            if k in LiteLLM_ManagementEndpoint_MetadataFields_Premium:
+            elif k in premium_fields_set:
+                # Only import/check premium when needed
                 from litellm.proxy.utils import _premium_user_check
 
                 _premium_user_check(k)
