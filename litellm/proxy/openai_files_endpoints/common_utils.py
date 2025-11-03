@@ -23,10 +23,17 @@ def _is_base64_encoded_unified_file_id(b64_uid: str) -> Union[str, Literal[False
 
 
 def convert_b64_uid_to_unified_uid(b64_uid: str) -> str:
-    is_base64_unified_file_id = _is_base64_encoded_unified_file_id(b64_uid)
-    if is_base64_unified_file_id:
-        return is_base64_unified_file_id
-    else:
+    # Inlined _is_base64_encoded_unified_file_id logic for efficiency
+    if not isinstance(b64_uid, str):
+        return b64_uid
+    padded = b64_uid + "=" * (-len(b64_uid) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(padded).decode()
+        if decoded.startswith(SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value):
+            return decoded
+        else:
+            return b64_uid
+    except Exception:
         return b64_uid
 
 
