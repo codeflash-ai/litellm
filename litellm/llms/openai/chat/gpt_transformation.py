@@ -25,7 +25,7 @@ from litellm.litellm_core_utils.llm_response_utils.convert_dict_to_response impo
     _handle_invalid_parallel_tool_calls,
     _should_convert_tool_call_to_json_mode,
 )
-from litellm.litellm_core_utils.prompt_templates.common_utils import get_tool_call_names
+from litellm.litellm_core_utils.prompt_templates.common_utils import filter_value_from_dict, get_tool_call_names
 from litellm.litellm_core_utils.prompt_templates.image_handling import (
     async_convert_url_to_base64,
     convert_url_to_base64,
@@ -393,22 +393,20 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         messages: List[AllMessageValues],
         tools: Optional[List["ChatCompletionToolParam"]] = None,
     ) -> Tuple[List[AllMessageValues], Optional[List["ChatCompletionToolParam"]]]:
-        from litellm.litellm_core_utils.prompt_templates.common_utils import (
-            filter_value_from_dict,
-        )
-        from litellm.types.llms.openai import ChatCompletionToolParam
-
-        for i, message in enumerate(messages):
-            messages[i] = cast(
-                AllMessageValues, filter_value_from_dict(message, "cache_control")  # type: ignore
-            )
+        # Import moved to module level for runtime efficiency
+        
+        # Use list comprehensions for better performance than enumerate+indexing
+        filtered_messages = [
+            cast(AllMessageValues, filter_value_from_dict(message, "cache_control"))  # type: ignore
+            for message in messages
+        ]
+        filtered_tools = None
         if tools is not None:
-            for i, tool in enumerate(tools):
-                tools[i] = cast(
-                    ChatCompletionToolParam,
-                    filter_value_from_dict(tool, "cache_control"),  # type: ignore
-                )
-        return messages, tools
+            filtered_tools = [
+                cast(ChatCompletionToolParam, filter_value_from_dict(tool, "cache_control"))  # type: ignore
+                for tool in tools
+            ]
+        return filtered_messages, filtered_tools
 
     def transform_request(
         self,
