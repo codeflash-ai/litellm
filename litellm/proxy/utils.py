@@ -34,6 +34,7 @@ from litellm.proxy._types import (
 )
 from litellm.types.guardrails import GuardrailEventHooks
 from litellm.types.utils import CallTypes
+import re
 
 try:
     import backoff
@@ -96,6 +97,10 @@ from litellm.types.mcp import (
     MCPPreCallResponseObject,
 )
 from litellm.types.utils import LLMResponseTypes, LoggedLiteLLMParams
+
+SK_KEY_REGEX = re.compile(r"^sk-[A-Za-z0-9_-]+$")
+
+HASHED_KEY_REGEX = re.compile(r"^[a-fA-F0-9]{64}$")
 
 if TYPE_CHECKING:
     from opentelemetry.trace import Span as _Span
@@ -3136,7 +3141,6 @@ async def send_email(
 
 
 def hash_token(token: str):
-    import hashlib
 
     # Hash the string using SHA-256
     hashed_token = hashlib.sha256(token.encode()).hexdigest()
@@ -3687,14 +3691,13 @@ def is_valid_api_key(key: str) -> bool:
     - hashed keys: must match ^[a-fA-F0-9]{64}$
     - Length between 20 and 100 characters
     """
-    import re
 
     if not isinstance(key, str):
         return False
     if 3 <= len(key) <= 100:
-        if re.match(r"^sk-[A-Za-z0-9_-]+$", key):
+        if SK_KEY_REGEX.match(key):
             return True
-        if re.match(r"^[a-fA-F0-9]{64}$", key):
+        if HASHED_KEY_REGEX.match(key):
             return True
     return False
 
