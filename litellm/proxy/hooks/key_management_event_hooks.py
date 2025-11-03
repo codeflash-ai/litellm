@@ -272,12 +272,11 @@ class KeyManagementEventHooks:
 
     @staticmethod
     def _get_secret_name(secret_name: str) -> str:
-        if litellm._key_management_settings.prefix_for_stored_virtual_keys.endswith(
-            "/"
-        ):
-            return f"{litellm._key_management_settings.prefix_for_stored_virtual_keys}{secret_name}"
+        prefix = litellm._key_management_settings.prefix_for_stored_virtual_keys
+        if prefix[-1] == "/":
+            return f"{prefix}{secret_name}"
         else:
-            return f"{litellm._key_management_settings.prefix_for_stored_virtual_keys}/{secret_name}"
+            return f"{prefix}/{secret_name}"
 
     @staticmethod
     async def _delete_virtual_keys_from_secret_manager(
