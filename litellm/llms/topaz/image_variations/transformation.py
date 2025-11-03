@@ -23,9 +23,7 @@ from ..common_utils import TopazException, TopazModelInfo
 
 
 class TopazImageVariationConfig(TopazModelInfo, BaseImageVariationConfig):
-    def get_supported_openai_params(
-        self, model: str
-    ) -> List[OpenAIImageVariationOptionalParams]:
+    def get_supported_openai_params(self, model: str) -> List[OpenAIImageVariationOptionalParams]:
         return ["response_format", "size"]
 
     def get_complete_url(
@@ -67,31 +65,31 @@ class TopazImageVariationConfig(TopazModelInfo, BaseImageVariationConfig):
         """
         # Default values
         filename = "image.png"
-        content: Optional[FileTypes] = None
         content_type = "image/png"
-        headers: Mapping[str, str] = {}
+        # Reuse empty dict instead of allocating each time since output never mutates it
+        _empty_headers: Mapping[str, str] = {}
+
+        # Short-circuit for most common & fastest cases: bytes or BytesIO
 
         if isinstance(file_data, (bytes, BytesIO)):
-            # Case 1: Just file content
-            content = file_data
-        elif isinstance(file_data, tuple):
-            if len(file_data) == 2:
-                # Case 2: (filename, content)
-                filename = file_data[0] or filename
-                content = file_data[1]
-            elif len(file_data) == 3:
-                # Case 3: (filename, content, content_type)
-                filename = file_data[0] or filename
-                content = file_data[1]
-                content_type = file_data[2] or content_type
-            elif len(file_data) == 4:
-                # Case 4: (filename, content, content_type, headers)
-                filename = file_data[0] or filename
-                content = file_data[1]
-                content_type = file_data[2] or content_type
-                headers = file_data[3]
+            return (filename, file_data, content_type, _empty_headers)
 
-        return (filename, content, content_type, headers)
+        if isinstance(file_data, tuple):
+            l = len(file_data)
+            # Fast variable assignment using constants for index lookup
+            if l == 2:
+                fn, content = file_data
+                # The 'or' fallback is needed per original behavior
+                return ((fn or filename), content, content_type, _empty_headers)
+            elif l == 3:
+                fn, content, ct = file_data
+                return ((fn or filename), content, (ct or content_type), _empty_headers)
+            elif l == 4:
+                fn, content, ct, headers = file_data
+                return ((fn or filename), content, (ct or content_type), headers)
+
+        # Fallback to defaults
+        return (filename, None, content_type, _empty_headers)
 
     def transform_request_image_variation(
         self,
@@ -144,9 +142,7 @@ class TopazImageVariationConfig(TopazModelInfo, BaseImageVariationConfig):
 
         response_ms = logging_obj.get_response_ms()
 
-        return self._common_transform_response_image_variation(
-            image_content, response_ms
-        )
+        return self._common_transform_response_image_variation(image_content, response_ms)
 
     def transform_response_image_variation(
         self,
@@ -163,17 +159,11 @@ class TopazImageVariationConfig(TopazModelInfo, BaseImageVariationConfig):
     ) -> ImageResponse:
         image_content = raw_response.content
 
-        response_ms = (
-            raw_response.elapsed.total_seconds() * 1000
-        )  # Convert to milliseconds
+        response_ms = raw_response.elapsed.total_seconds() * 1000  # Convert to milliseconds
 
-        return self._common_transform_response_image_variation(
-            image_content, response_ms
-        )
+        return self._common_transform_response_image_variation(image_content, response_ms)
 
-    def get_error_class(
-        self, error_message: str, status_code: int, headers: Union[dict, Headers]
-    ) -> BaseLLMException:
+    def get_error_class(self, error_message: str, status_code: int, headers: Union[dict, Headers]) -> BaseLLMException:
         return TopazException(
             status_code=status_code,
             message=error_message,
