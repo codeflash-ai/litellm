@@ -135,25 +135,22 @@ def _is_allowed_to_make_key_request(
 
     Relevant issue: https://github.com/BerriAI/litellm/issues/7336
     """
-    ## BASE CASE - PROXY ADMIN
-    if (
-        user_api_key_dict.user_role is not None
-        and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN.value
-    ):
+    # BASE CASE - PROXY ADMIN
+    user_role = user_api_key_dict.user_role  # localize attribute lookup for minor speedup
+    if user_role is not None and user_role == LitellmUserRoles.PROXY_ADMIN.value:
         return True
 
     if user_id is not None:
+        api_user_id = user_api_key_dict.user_id
         assert (
-            user_id == user_api_key_dict.user_id
+            user_id == api_user_id
         ), "User can only create keys for themselves. Got user_id={}, Your ID={}".format(
-            user_id, user_api_key_dict.user_id
+            user_id, api_user_id
         )
 
     if team_id is not None:
-        if (
-            user_api_key_dict.team_id is not None
-            and user_api_key_dict.team_id == UI_TEAM_ID
-        ):
+        api_team_id = user_api_key_dict.team_id
+        if api_team_id is not None and api_team_id == UI_TEAM_ID:
             return True  # handle https://github.com/BerriAI/litellm/issues/7482
 
     return True
