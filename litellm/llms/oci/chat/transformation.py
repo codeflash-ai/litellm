@@ -518,7 +518,7 @@ class OCIChatConfig(BaseConfig):
         for tool in tools:
             function_def = tool.get("function", {})
             parameters = function_def.get("parameters", {}).get("properties", {})
-            required = function_def.get("parameters", {}).get("required", [])
+            required = set(function_def.get("parameters", {}).get("required", []))
             
             parameter_definitions = {}
             for param_name, param_schema in parameters.items():
