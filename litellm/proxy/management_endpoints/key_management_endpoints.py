@@ -72,6 +72,12 @@ from litellm.types.utils import (
     TeamUIKeyGenerationConfig,
 )
 
+_ALLOWED_ROUTES = {
+    LiteLLMKeyType.LLM_API: ["llm_api_routes"],
+    LiteLLMKeyType.MANAGEMENT: ["management_routes"],
+    LiteLLMKeyType.READ_ONLY: ["info_routes"],
+}
+
 
 def _is_team_key(data: Union[GenerateKeyRequest, LiteLLM_VerificationToken]):
     return data.team_id is not None
@@ -378,13 +384,12 @@ def handle_key_type(data: GenerateKeyRequest, data_json: dict) -> dict:
     Handle the key type.
     """
     key_type = data.key_type
-    data_json.pop("key_type", None)
-    if key_type == LiteLLMKeyType.LLM_API:
-        data_json["allowed_routes"] = ["llm_api_routes"]
-    elif key_type == LiteLLMKeyType.MANAGEMENT:
-        data_json["allowed_routes"] = ["management_routes"]
-    elif key_type == LiteLLMKeyType.READ_ONLY:
-        data_json["allowed_routes"] = ["info_routes"]
+    # Use __delitem__ to avoid extra function lookup and None assignment, faster for guaranteed key presence
+    if "key_type" in data_json:
+        del data_json["key_type"]
+
+    if key_type in _ALLOWED_ROUTES:
+        data_json["allowed_routes"] = _ALLOWED_ROUTES[key_type]
     return data_json
 
 
