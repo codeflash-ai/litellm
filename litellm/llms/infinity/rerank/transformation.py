@@ -32,7 +32,8 @@ class InfinityRerankConfig(CohereRerankConfig):
         # Remove trailing slashes and ensure clean base URL
         api_base = api_base.rstrip("/")
         if not api_base.endswith("/rerank"):
-            api_base = f"{api_base}/rerank"
+            # Use string concatenation for better performance than f-string in this context
+            api_base += "/rerank"
         return api_base
 
     def validate_environment(
@@ -42,11 +43,7 @@ class InfinityRerankConfig(CohereRerankConfig):
         api_key: Optional[str] = None,
     ) -> dict:
         if api_key is None:
-            api_key = (
-                get_secret_str("INFINITY_API_KEY")
-                or get_secret_str("INFINITY_API_KEY")
-                or litellm.infinity_key
-            )
+            api_key = get_secret_str("INFINITY_API_KEY") or get_secret_str("INFINITY_API_KEY") or litellm.infinity_key
 
         default_headers = {
             "Authorization": f"Bearer {api_key}",
@@ -80,9 +77,7 @@ class InfinityRerankConfig(CohereRerankConfig):
         try:
             raw_response_json = raw_response.json()
         except Exception:
-            raise InfinityError(
-                message=raw_response.text, status_code=raw_response.status_code
-            )
+            raise InfinityError(message=raw_response.text, status_code=raw_response.status_code)
 
         _billed_units = RerankBilledUnits(**raw_response_json.get("usage", {}))
         _tokens = RerankTokens(
@@ -102,9 +97,7 @@ class InfinityRerankConfig(CohereRerankConfig):
                     relevance_score=result.get("relevance_score"),
                 )
                 if result.get("document"):
-                    _rerank_response["document"] = RerankResponseDocument(
-                        text=result.get("document")
-                    )
+                    _rerank_response["document"] = RerankResponseDocument(text=result.get("document"))
                 cohere_results.append(_rerank_response)
         if cohere_results is None:
             raise ValueError(f"No results found in the response={raw_response_json}")
