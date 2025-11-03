@@ -15,6 +15,10 @@ class CredentialsManagementClient:
         """
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
+        self._headers_with_auth: Optional[Dict[str, str]] = None
+        self._headers_no_auth: Dict[str, str] = {"Content-Type": "application/json"}
+        if self._api_key:
+            self._headers_with_auth = {"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"}
 
     def _get_headers(self) -> Dict[str, str]:
         """
@@ -23,10 +27,9 @@ class CredentialsManagementClient:
         Returns:
             Dict[str, str]: Headers to use for API requests
         """
-        headers = {"Content-Type": "application/json"}
         if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
+            return self._headers_with_auth  # type: ignore
+        return self._headers_no_auth
 
     def list(
         self,
