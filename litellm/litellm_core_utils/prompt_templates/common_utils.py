@@ -51,6 +51,31 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
 
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",   # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
+
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
     messages: Any,
@@ -260,27 +285,33 @@ def _insert_user_continue_message(
     """
     if not messages:
         return messages
-
-    result_messages = messages.copy()  # Don't modify the input list
     continue_message = user_continue_message or DEFAULT_USER_CONTINUE_MESSAGE
+    orig_len = len(messages)
+    # We avoid .copy() and multiple .insert() calls (which are O(n) per insertion)
+    # Instead, we build a new list in a single pass for much better performance.
 
-    # Handle first message if it's an assistant message
-    if result_messages[0]["role"] == "assistant":
-        result_messages.insert(0, continue_message)
+    result_messages: List[AllMessageValues] = []
 
-    # Handle consecutive assistant messages and final message
-    i = 1  # Start from second message since we handled first message
-    while i < len(result_messages):
-        curr_message = result_messages[i]
-        prev_message = result_messages[i - 1]
+    # Handle the initial assistant message
+    idx = 0
+    if messages[0]["role"] == "assistant":
+        result_messages.append(continue_message)
+    result_messages.append(messages[0])
+
+    # Main loop for consecutive assistant messages
+    for idx in range(1, orig_len):
+        curr_message = messages[idx]
+        prev_message = messages[idx - 1]
+
+        # Only check for consecutive assistant messages, ignore all other role types
 
         # Only check for consecutive assistant messages
         # Ignore all other role types
         if curr_message["role"] == "assistant" and prev_message["role"] == "assistant":
-            result_messages.insert(i, continue_message)
-            i += 2  # Skip over the message we just inserted
-        else:
-            i += 1
+            result_messages.append(continue_message)
+        result_messages.append(curr_message)
+
+    # Handle final assistant message if needed
 
     # Handle final message
     if result_messages[-1]["role"] == "assistant" and ensure_alternating_roles:
@@ -309,21 +340,22 @@ def _insert_assistant_continue_message(
         return messages
 
     # Create a new list to store modified messages
-    modified_messages: List[AllMessageValues] = []
 
-    for i, message in enumerate(messages):
+    continue_message = assistant_continue_message or DEFAULT_ASSISTANT_CONTINUE_MESSAGE
+
+    # Build a new list in a single pass for efficiency
+    orig_len = len(messages)
+    modified_messages: List[AllMessageValues] = []
+    for i in range(orig_len):
+        message = messages[i]
         modified_messages.append(message)
 
         # Check if we need to insert an assistant message
         if (
-            i < len(messages) - 1  # Not the last message
+            i < orig_len - 1
             and message.get("role") == "user"  # Current is user
             and messages[i + 1].get("role") == "user"
         ):  # Next is user
-            # Insert assistant message
-            continue_message = (
-                assistant_continue_message or DEFAULT_ASSISTANT_CONTINUE_MESSAGE
-            )
             modified_messages.append(continue_message)
 
     return modified_messages
@@ -621,36 +653,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
