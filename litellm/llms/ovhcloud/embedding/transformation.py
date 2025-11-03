@@ -67,10 +67,9 @@ class OVHCloudEmbeddingConfig(BaseEmbeddingConfig):
         model: str,
         drop_params: bool,
     ):
-        supported_openai_params = self.get_supported_openai_params(model)
-        for param, value in non_default_params.items():
-            if param in supported_openai_params:
-                optional_params[param] = value
+        supported_openai_params = set(self.get_supported_openai_params(model))
+        for param in non_default_params.keys() & supported_openai_params:
+            optional_params[param] = non_default_params[param]
         return optional_params
 
     def transform_embedding_request(
@@ -117,6 +116,4 @@ class OVHCloudEmbeddingConfig(BaseEmbeddingConfig):
     def get_error_class(
         self, error_message: str, status_code: int, headers: Union[dict, httpx.Headers]
     ) -> BaseLLMException:
-        return OVHCloudException(
-            message=error_message, status_code=status_code, headers=headers
-        )
+        return OVHCloudException(message=error_message, status_code=status_code, headers=headers)
