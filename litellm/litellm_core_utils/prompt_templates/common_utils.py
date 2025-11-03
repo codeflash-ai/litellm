@@ -51,6 +51,31 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
 
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",   # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
+
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
     messages: Any,
@@ -151,10 +176,11 @@ def get_str_from_messages(messages: List[AllMessageValues]) -> str:
 
 
 def is_non_content_values_set(message: AllMessageValues) -> bool:
-    ignore_keys = ["content", "role", "name"]
-    return any(
-        message.get(key, None) is not None for key in message if key not in ignore_keys
-    )
+    ignore_keys = {"content", "role", "name"}
+    for key, value in message.items():
+        if key not in ignore_keys and value is not None:
+            return True
+    return False
 
 
 def _audio_or_image_in_message_content(message: AllMessageValues) -> bool:
@@ -621,36 +647,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
