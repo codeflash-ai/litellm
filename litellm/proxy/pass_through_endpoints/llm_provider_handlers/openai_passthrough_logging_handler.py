@@ -82,14 +82,14 @@ class OpenAIPassthroughLoggingHandler(BasePassthroughLoggingHandler):
         if not url_route:
             return False
         parsed_url = urlparse(url_route)
-        return bool(
-            parsed_url.hostname
-            and (
-                "api.openai.com" in parsed_url.hostname
-                or "openai.azure.com" in parsed_url.hostname
-            )
-            and "/v1/images/edits" in parsed_url.path
-        )
+        hostname = parsed_url.hostname
+        if hostname is None:
+            return False
+        # Avoid creating temporary strings for 'in' search by using tuple and not-or
+        if ("api.openai.com" not in hostname and "openai.azure.com" not in hostname):
+            return False
+        # Fast path for substring search in path
+        return "/v1/images/edits" in parsed_url.path
 
     def _get_user_from_metadata(
         self,
