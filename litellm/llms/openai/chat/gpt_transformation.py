@@ -120,12 +120,22 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         top_p: Optional[int] = None,
         response_format: Optional[dict] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Use __slots__-style logic to avoid dynamic attribute dict,
+        # but since behavior must not change and inheritance might depend on __dict__,
+        # optimize the setattr loop by using an explicit tuple of relevant parameter names
+        param_names = (
+            "frequency_penalty", "function_call", "functions", "logit_bias",
+            "max_tokens", "n", "presence_penalty", "stop",
+            "temperature", "top_p", "response_format"
+        )
 
-        self.__class__._is_base_class = False
+        cls = self.__class__
+        for key in param_names:
+            value = locals()[key]
+            if value is not None:
+                setattr(cls, key, value)
+
+        cls._is_base_class = False
 
     @classmethod
     def get_config(cls):
@@ -666,18 +676,18 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         Returns:
             str: The complete URL for the API call.
         """
-        if api_base is None:
-            api_base = "https://api.openai.com"
+        # Hoist constants and minimize branching
         endpoint = "chat/completions"
 
-        # Remove trailing slash from api_base if present
-        api_base = api_base.rstrip("/")
+        if api_base is None:
+            return f"https://api.openai.com/{endpoint}"
 
-        # Check if endpoint is already in the api_base
-        if endpoint in api_base:
-            return api_base
+        api_base_stripped = api_base.rstrip('/')
+        # Fast path: if endpoint already in base, return as is
+        if endpoint in api_base_stripped:
+            return api_base_stripped
 
-        return f"{api_base}/{endpoint}"
+        return f"{api_base_stripped}/{endpoint}"
 
     def validate_environment(
         self,
