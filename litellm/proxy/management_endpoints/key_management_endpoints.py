@@ -1210,9 +1210,11 @@ async def _handle_update_object_permission(
     # Add the object_permission_id to data_json if one was created/updated
     if object_permission_id is not None:
         data_json["object_permission_id"] = object_permission_id
-        verbose_proxy_logger.debug(
-            f"updated object_permission_id: {object_permission_id}"
-        )
+        if verbose_proxy_logger.isEnabledFor(10):  # logging.DEBUG == 10
+            verbose_proxy_logger.debug(
+                f"updated object_permission_id: {object_permission_id}"
+            )
+
 
     return data_json
 
