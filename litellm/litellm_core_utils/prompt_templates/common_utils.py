@@ -36,6 +36,7 @@ from litellm.types.utils import (
     SpecialEnums,
     StreamingChoices,
 )
+from litellm.proxy.openai_files_endpoints.common_utils import convert_b64_uid_to_unified_uid
 
 if TYPE_CHECKING:  # newer pattern to avoid importing pydantic objects on __init__.py
     from litellm.types.llms.openai import ChatCompletionImageObject
@@ -50,6 +51,37 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
+
+_LITELM_PREFIX = SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value
+
+_LITELM_PATTERN = re.compile(
+    f"{re.escape(_LITELM_PREFIX)}:(.*?);unified_id"
+)
+
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",   # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
 
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
@@ -364,21 +396,13 @@ def get_format_from_file_id(file_id: Optional[str]) -> Optional[str]:
     unified_file_id = litellm_proxy:{};unified_id,{}
     If not a unified file id, returns 'file' as default format
     """
-    from litellm.proxy.openai_files_endpoints.common_utils import (
-        convert_b64_uid_to_unified_uid,
-    )
 
     if not file_id:
         return None
     try:
         transformed_file_id = convert_b64_uid_to_unified_uid(file_id)
-        if transformed_file_id.startswith(
-            SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value
-        ):
-            match = re.match(
-                f"{SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value}:(.*?);unified_id",
-                transformed_file_id,
-            )
+        if transformed_file_id.startswith(_LITELM_PREFIX):
+            match = _LITELM_PATTERN.match(transformed_file_id)
             if match:
                 return match.group(1)
 
@@ -402,29 +426,35 @@ def update_messages_with_model_file_ids(
     }
     """
 
+
+    # Predefine locals for minor speedup
+    get = dict.get
+
     for message in messages:
         if message.get("role") == "user":
             content = message.get("content")
-            if content:
-                if isinstance(content, str):
-                    continue
-                for c in content:
-                    if c["type"] == "file":
-                        file_object = cast(ChatCompletionFileObject, c)
-                        file_object_file_field = file_object["file"]
-                        file_id = file_object_file_field.get("file_id")
-                        format = file_object_file_field.get(
-                            "format", get_format_from_file_id(file_id)
+            if not content or isinstance(content, str):
+                continue
+            # For each dict in content list
+            for c in content:
+                if c["type"] == "file":
+                    file_object = cast(ChatCompletionFileObject, c)
+                    file_object_file_field = file_object["file"]
+                    file_id = file_object_file_field.get("file_id")
+                    # Evaluate get_format_from_file_id only if needed
+                    format_val = file_object_file_field.get(
+                        "format"
+                    )
+                    if format_val is None:
+                        format_val = get_format_from_file_id(file_id)
+                    if file_id:
+                        provider_file_id = (
+                            get(model_file_id_mapping, file_id, {}).get(model_id)
+                            or file_id
                         )
-
-                        if file_id:
-                            provider_file_id = (
-                                model_file_id_mapping.get(file_id, {}).get(model_id)
-                                or file_id
-                            )
-                            file_object_file_field["file_id"] = provider_file_id
-                        if format:
-                            file_object_file_field["format"] = format
+                        file_object_file_field["file_id"] = provider_file_id
+                    if format_val:
+                        file_object_file_field["format"] = format_val
     return messages
 
 
@@ -621,36 +651,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
