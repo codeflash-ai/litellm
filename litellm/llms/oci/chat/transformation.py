@@ -68,13 +68,11 @@ def sha256_base64(data: bytes) -> str:
 
 
 def build_signature_string(method, path, headers, signed_headers):
-    lines = []
-    for header in signed_headers:
-        if header == "(request-target)":
-            value = f"{method.lower()} {path}"
-        else:
-            value = headers[header]
-        lines.append(f"{header}: {value}")
+    method_lower = method.lower()
+    lines = [
+        f"{header}: {method_lower} {path}" if header == "(request-target)" else f"{header}: {headers[header]}"
+        for header in signed_headers
+    ]
     return "\n".join(lines)
 
 
