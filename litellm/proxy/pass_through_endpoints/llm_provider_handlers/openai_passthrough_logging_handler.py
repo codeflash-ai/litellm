@@ -52,14 +52,17 @@ class OpenAIPassthroughLoggingHandler(BasePassthroughLoggingHandler):
         if not url_route:
             return False
         parsed_url = urlparse(url_route)
-        return bool(
-            parsed_url.hostname
-            and (
-                "api.openai.com" in parsed_url.hostname
-                or "openai.azure.com" in parsed_url.hostname
-            )
-            and "/v1/chat/completions" in parsed_url.path
-        )
+        hostname = parsed_url.hostname
+        if not hostname:
+            return False
+
+        # Fast path: check for substring match via a tuple, avoid repeated attribute accesses
+        if ("api.openai.com" in hostname or "openai.azure.com" in hostname):
+            # Only check for path if hostname is matched, reduces string lookups
+            path = parsed_url.path
+            return "/v1/chat/completions" in path
+
+        return False
 
     @staticmethod
     def is_openai_image_generation_route(url_route: str) -> bool:
