@@ -51,6 +51,31 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
 
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",   # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
+
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
     messages: Any,
@@ -126,18 +151,15 @@ def convert_content_list_to_str(
 
     Motivation: mistral api + azure ai don't support content as a list
     """
-    texts = ""
     message_content = message.get("content")
-    if message_content:
-        if message_content is not None and isinstance(message_content, list):
-            for c in message_content:
-                text_content = c.get("text")
-                if text_content:
-                    texts += text_content
-        elif message_content is not None and isinstance(message_content, str):
-            texts = message_content
-
-    return texts
+    if not message_content:
+        return ""
+    if isinstance(message_content, str):
+        return message_content
+    if isinstance(message_content, list):
+        filtered_contents = [c.get("text") for c in message_content if c.get("text")]
+        return "".join(filtered_contents)
+    return ""
 
 
 def get_str_from_messages(messages: List[AllMessageValues]) -> str:
@@ -179,16 +201,14 @@ def convert_openai_message_to_only_content_messages(
     Used for calling guardrails integrations which expect string content
     """
     converted_messages = []
-    user_roles = ["user", "tool", "function"]
+    user_roles = {"user", "tool", "function"}  # set lookup is faster
+    user_append = converted_messages.append  # micro-optimization: method caching
     for message in messages:
-        if message.get("role") in user_roles:
-            converted_messages.append(
-                {"role": "user", "content": convert_content_list_to_str(message)}
-            )
-        elif message.get("role") == "assistant":
-            converted_messages.append(
-                {"role": "assistant", "content": convert_content_list_to_str(message)}
-            )
+        role = message.get("role")
+        if role in user_roles:
+            user_append({"role": "user", "content": convert_content_list_to_str(message)})
+        elif role == "assistant":
+            user_append({"role": "assistant", "content": convert_content_list_to_str(message)})
     return converted_messages
 
 
@@ -621,36 +641,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
