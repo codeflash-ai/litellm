@@ -40,14 +40,11 @@ def str_to_bool(value: Optional[str]) -> Optional[bool]:
     if value is None:
         return None
 
-    true_values = {"true"}
-    false_values = {"false"}
-
     value_lower = value.strip().lower()
 
-    if value_lower in true_values:
+    if value_lower == "true":
         return True
-    elif value_lower in false_values:
+    elif value_lower == "false":
         return False
     else:
         return None
@@ -121,7 +118,7 @@ def get_secret(  # noqa: PLR0915
             )
             if response.status_code == 200:
                 oidc_token = response.text
-                oidc_cache.set_cache(key=secret_name, value=oidc_token, ttl=3600 - 60)
+                oidc_cache.set_cache(key=secret_name, value=oidc_token, ttl=3540)
                 return oidc_token
             else:
                 raise ValueError("Google OIDC provider failed")
@@ -161,7 +158,7 @@ def get_secret(  # noqa: PLR0915
             )
             if response.status_code == 200:
                 oidc_token = response.json().get("value", None)
-                oidc_cache.set_cache(key=secret_name, value=oidc_token, ttl=300 - 5)
+                oidc_cache.set_cache(key=secret_name, value=oidc_token, ttl=295)
                 return oidc_token
             else:
                 raise ValueError("Github OIDC provider failed")
@@ -216,10 +213,8 @@ def get_secret(  # noqa: PLR0915
                     key_manager = key_management_system.value
 
                 if key_management_settings is not None:
-                    if (
-                        key_management_settings.hosted_keys is not None
-                        and secret_name not in key_management_settings.hosted_keys
-                    ):  # allow user to specify which keys to check in hosted key manager
+                    hosted_keys = key_management_settings.hosted_keys
+                    if hosted_keys is not None and secret_name not in hosted_keys:
                         key_manager = "local"
 
                 if (
@@ -237,26 +232,23 @@ def get_secret(  # noqa: PLR0915
                         raise ValueError("Google KMS requires the encrypted secret to be in the environment!")
                     b64_flag = _is_base64(encrypted_secret)
                     if b64_flag is True:  # if passed in as encoded b64 string
-                        encrypted_secret = base64.b64decode(encrypted_secret)
-                        ciphertext = encrypted_secret
+                        encrypted_secret_bytes = base64.b64decode(encrypted_secret)
+                        response = client.decrypt(
+                            request={
+                                "name": litellm._google_kms_resource_name,
+                                "ciphertext": encrypted_secret_bytes,
+                            }
+                        )
+                        secret = response.plaintext.decode("utf-8")
                     else:
                         raise ValueError(
                             "Google KMS requires the encrypted secret to be encoded in base64"
                         )  # fix for this vulnerability https://huntr.com/bounties/ae623c2f-b64b-4245-9ed4-f13a0a5824ce
-                    response = client.decrypt(
-                        request={
-                            "name": litellm._google_kms_resource_name,
-                            "ciphertext": ciphertext,
-                        }
-                    )
-                    secret = response.plaintext.decode("utf-8")  # assumes the original value was encoded with utf-8
                 elif key_manager == KeyManagementSystem.AWS_KMS.value:
-                    """
-                    Only check the tokens which start with 'aws_kms/'. This prevents latency impact caused by checking all keys.
-                    """
                     encrypted_value = os.getenv(secret_name, None)
                     if encrypted_value is None:
-                        raise Exception("AWS KMS - Encrypted Value of Key={} is None".format(secret_name))
+                        raise Exception(f"AWS KMS - Encrypted Value of Key={secret_name} is None")
+
                     # Decode the base64 encoded ciphertext
                     ciphertext_blob = base64.b64decode(encrypted_value)
 
@@ -271,9 +263,7 @@ def get_secret(  # noqa: PLR0915
                     if isinstance(secret, str):
                         secret = secret.strip()
                 elif key_manager == KeyManagementSystem.AWS_SECRET_MANAGER.value:
-                    from litellm.secret_managers.aws_secret_manager_v2 import (
-                        AWSSecretsManagerV2,
-                    )
+                    from litellm.secret_managers.aws_secret_manager_v2 import AWSSecretsManagerV2
 
                     if isinstance(client, AWSSecretsManagerV2):
                         secret = client.sync_read_secret(
@@ -309,18 +299,33 @@ def get_secret(  # noqa: PLR0915
                 secret = os.getenv(secret_name)
             try:
                 if isinstance(secret, str):
+                    # Fast path for most common cases
+                    if secret == "true":
+                        return True
+                    elif secret == "false":
+                        return False
                     secret_value_as_bool = ast.literal_eval(secret)
                     if isinstance(secret_value_as_bool, bool):
                         return secret_value_as_bool
                     else:
                         return secret
+                else:
+                    return secret
             except Exception:
                 return secret
         else:
             secret = os.environ.get(secret_name)
-            secret_value_as_bool = str_to_bool(secret) if secret is not None else None
-            if secret_value_as_bool is not None and isinstance(secret_value_as_bool, bool):
-                return secret_value_as_bool
+            if secret is not None:
+                # Fast path for common boolean env strings
+                if secret == "true":
+                    return True
+                elif secret == "false":
+                    return False
+                secret_value_as_bool = str_to_bool(secret)
+                if secret_value_as_bool is not None and isinstance(secret_value_as_bool, bool):
+                    return secret_value_as_bool
+                else:
+                    return secret
             else:
                 return secret
     except Exception as e:
