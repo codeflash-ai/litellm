@@ -21,9 +21,9 @@ class ProviderSpecificHeaderUtils:
             return {}
 
         stored_providers = provider_specific_header.get("custom_llm_provider", "")
-        provider_list = [p.strip() for p in stored_providers.split(",")]
 
-        if custom_llm_provider in provider_list:
-            return provider_specific_header.get("extra_headers", {})
+        for p in stored_providers.split(","):
+            if custom_llm_provider == p.strip():
+                return provider_specific_header.get("extra_headers", {})
 
         return {}
