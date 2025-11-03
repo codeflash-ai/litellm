@@ -3,7 +3,7 @@ GitLab prompt manager with configurable prompts folder.
 """
 
 from typing import Any, Dict, List, Optional, Tuple, Union
-from jinja2 import DictLoader, Environment, select_autoescape
+from jinja2 import Template, DictLoader, Environment, select_autoescape
 
 from litellm.integrations.custom_prompt_management import CustomPromptManagement
 from litellm.integrations.prompt_management_base import (
@@ -80,6 +80,7 @@ class GitLabTemplateManager:
             comment_end_string="#}",
         )
 
+        self._compiled_templates: Dict[str, Template] = {}
         if self.prompt_id:
             self._load_prompt_from_gitlab(self.prompt_id)
 
@@ -187,9 +188,13 @@ class GitLabTemplateManager:
     ) -> str:
         if template_id not in self.prompts:
             raise ValueError(f"Template '{template_id}' not found")
-        template = self.prompts[template_id]
-        jinja_template = self.jinja_env.from_string(template.content)
-        return jinja_template.render(**(variables or {}))
+        compiled_template = self._compiled_templates.get(template_id)
+        if compiled_template is None:
+            template = self.prompts[template_id]
+            jinja_template = self.jinja_env.from_string(template.content)
+            self._compiled_templates[template_id] = jinja_template
+            compiled_template = jinja_template
+        return compiled_template.render(**(variables or {}))
 
     def get_template(self, template_id: str) -> Optional[GitLabPromptTemplate]:
         return self.prompts.get(template_id)
