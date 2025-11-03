@@ -29,38 +29,28 @@ class SpeechToCompletionBridgeHandler:
         super().__init__()
         self.transformation_handler = SpeechToCompletionBridgeTransformationHandler()
 
-    def validate_input_kwargs(
-        self, kwargs: dict
-    ) -> SpeechToCompletionBridgeHandlerInputKwargs:
+    def validate_input_kwargs(self, kwargs: dict) -> SpeechToCompletionBridgeHandlerInputKwargs:
+        # Pull all required keys at once
+        required_str_keys = ("model", "custom_llm_provider", "input")
+        required_dict_keys = ("optional_params", "litellm_params", "headers")
+        # Assign variables to local scope in one pass to reduce lookups
+        missing_str = [k for k in required_str_keys if not (isinstance(kwargs.get(k), str))]
+        if missing_str:
+            raise ValueError(f"{missing_str[0]} is required")
+        missing_dict = [k for k in required_dict_keys if not (isinstance(kwargs.get(k), dict))]
+        if missing_dict:
+            raise ValueError(f"{missing_dict[0]} is required")
+
+        # Only call get once per key
+        model = kwargs["model"]
+        custom_llm_provider = kwargs["custom_llm_provider"]
+        input = kwargs["input"]
+        optional_params = kwargs["optional_params"]
+        litellm_params = kwargs["litellm_params"]
+        headers = kwargs["headers"]
+
+        # No duplicate header checking
         from litellm import LiteLLMLoggingObj
-
-        model = kwargs.get("model")
-        if model is None or not isinstance(model, str):
-            raise ValueError("model is required")
-
-        custom_llm_provider = kwargs.get("custom_llm_provider")
-        if custom_llm_provider is None or not isinstance(custom_llm_provider, str):
-            raise ValueError("custom_llm_provider is required")
-
-        input = kwargs.get("input")
-        if input is None or not isinstance(input, str):
-            raise ValueError("input is required")
-
-        optional_params = kwargs.get("optional_params")
-        if optional_params is None or not isinstance(optional_params, dict):
-            raise ValueError("optional_params is required")
-
-        litellm_params = kwargs.get("litellm_params")
-        if litellm_params is None or not isinstance(litellm_params, dict):
-            raise ValueError("litellm_params is required")
-
-        headers = kwargs.get("headers")
-        if headers is None or not isinstance(headers, dict):
-            raise ValueError("headers is required")
-
-        headers = kwargs.get("headers")
-        if headers is None or not isinstance(headers, dict):
-            raise ValueError("headers is required")
 
         logging_obj = kwargs.get("logging_obj")
         if logging_obj is None or not isinstance(logging_obj, LiteLLMLoggingObj):
