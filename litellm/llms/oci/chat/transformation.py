@@ -976,9 +976,11 @@ def adapt_messages_to_generic_oci_standard_tool_call(
 def adapt_messages_to_generic_oci_standard_tool_response(
     role: str, tool_call_id: str, content: str
 ) -> OCIMessage:
+    oci_role = open_ai_to_generic_oci_role_map[role]
+    content_part = OCITextContentPart(text=content)
     return OCIMessage(
-        role=open_ai_to_generic_oci_role_map[role],
-        content=[OCITextContentPart(text=content)],
+        role=oci_role,
+        content=[content_part],
         toolCalls=None,
         toolCallId=tool_call_id,
     )
