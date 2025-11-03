@@ -7,12 +7,35 @@ from litellm.types.llms.openai import (
 
 from ...openai_like.chat.transformation import OpenAILikeChatConfig
 
+_GRADIENTAI_SUPPORTED_PARAMS = [
+    "frequency_penalty",
+    "max_tokens",
+    "max_completion_tokens",
+    "presence_penalty",
+    "stop",
+    "stream",
+    "stream_options",
+    "temperature",
+    "top_p",
+    # GradientAI specific parameters
+    "k",
+    "kb_filters",
+    "filter_kb_content_by_query_metadata",
+    "instruction_override",
+    "include_functions_info",
+    "include_retrieval_info",
+    "include_guardrails_info",
+    "provide_citations",
+    "retrieval_method",
+]
+
+_GRADIENTAI_SUPPORTED_PARAMS_SET = set(_GRADIENTAI_SUPPORTED_PARAMS)
+
 # Default GradientAI endpoint
 GRADIENT_AI_SERVERLESS_ENDPOINT = "https://inference.do-ai.run"
 
 
 class GradientAIConfig(OpenAILikeChatConfig):
-
     k: Optional[int] = None
     kb_filters: Optional[List[Dict]] = None
     filter_kb_content_by_query_metadata: Optional[bool] = None
@@ -76,14 +99,16 @@ class GradientAIConfig(OpenAILikeChatConfig):
         ]
         return supported_params
 
-    def validate_environment(self,
-                             headers: dict,
-                             model: str,
-                             messages: List[AllMessageValues],
-                             optional_params: dict,
-                             litellm_params: dict,
-                             api_key: Optional[str] = None,
-                             api_base: Optional[str] = None):
+    def validate_environment(
+        self,
+        headers: dict,
+        model: str,
+        messages: List[AllMessageValues],
+        optional_params: dict,
+        litellm_params: dict,
+        api_key: Optional[str] = None,
+        api_base: Optional[str] = None,
+    ):
         api_key = api_key or get_secret_str("GRADIENT_AI_API_KEY")
         if api_key is None:
             raise ValueError("GradientAI API key not found")
@@ -133,15 +158,16 @@ class GradientAIConfig(OpenAILikeChatConfig):
         drop_params: bool = False,
         replace_max_completion_tokens_with_max_tokens: bool = False,
     ) -> dict:
-        supported_openai_params = self.get_supported_openai_params(model=model)
+        # Use the cached set for O(1) lookup
+        supported_openai_params_set = _GRADIENTAI_SUPPORTED_PARAMS_SET
         for param, value in non_default_params.items():
-            if param in supported_openai_params:
+            if param in supported_openai_params_set:
                 optional_params[param] = value
             elif not drop_params:
                 from litellm.utils import UnsupportedParamsError
+
                 raise UnsupportedParamsError(
                     status_code=400,
-                    message=f"GradientAI does not support parameter '{param}'. To drop unsupported params, set `drop_params=True`."
+                    message=f"GradientAI does not support parameter '{param}'. To drop unsupported params, set `drop_params=True`.",
                 )
-
         return optional_params
