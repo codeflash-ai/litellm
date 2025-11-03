@@ -654,69 +654,52 @@ def check_team_key_model_specific_limits(
     model_specific_tpm_limit: Dict[str, int] = {}
 
     for key in keys:
-        if key.metadata.get("model_rpm_limit", None) is not None:
-            for model, rpm_limit in key.metadata.get("model_rpm_limit", {}).items():
-                model_specific_rpm_limit[model] = (
-                    model_specific_rpm_limit.get(model, 0) + rpm_limit
-                )
-        if key.metadata.get("model_tpm_limit", None) is not None:
-            for model, tpm_limit in key.metadata.get("model_tpm_limit", {}).items():
-                model_specific_tpm_limit[model] = (
-                    model_specific_tpm_limit.get(model, 0) + tpm_limit
-                )
+        rpm_dict = key.metadata.get("model_rpm_limit")
+        if rpm_dict:
+            for model, rpm_limit in rpm_dict.items():
+                model_specific_rpm_limit[model] = model_specific_rpm_limit.get(model, 0) + rpm_limit
+        tpm_dict = key.metadata.get("model_tpm_limit")
+        if tpm_dict:
+            for model, tpm_limit in tpm_dict.items():
+                model_specific_tpm_limit[model] = model_specific_tpm_limit.get(model, 0) + tpm_limit
+
+    # Use local references for team_table metadata dicts to reduce attribute access
+    team_metadata = team_table.metadata or {}
+
     if data.model_rpm_limit is not None:
+        team_metadata_rpm = team_metadata.get("model_rpm_limit", {})
+        team_rpm_limit = team_table.rpm_limit
         for model, rpm_limit in data.model_rpm_limit.items():
-            if (
-                team_table.rpm_limit is not None
-                and model_specific_rpm_limit.get(model, 0) + rpm_limit
-                > team_table.rpm_limit
-            ):
+            allocated = model_specific_rpm_limit.get(model, 0) + rpm_limit
+            if team_rpm_limit is not None and allocated > team_rpm_limit:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Allocated RPM limit={model_specific_rpm_limit.get(model, 0)} + Key RPM limit={rpm_limit} is greater than team RPM limit={team_table.rpm_limit}",
+                    detail=f"Allocated RPM limit={model_specific_rpm_limit.get(model, 0)} + Key RPM limit={rpm_limit} is greater than team RPM limit={team_rpm_limit}",
                 )
-            elif team_table.metadata and team_table.metadata.get("model_rpm_limit"):
-                team_model_specific_rpm_limit_dict = team_table.metadata.get(
-                    "model_rpm_limit", {}
+            team_model_specific_rpm_limit = team_metadata_rpm.get(model)
+            if team_model_specific_rpm_limit is not None and allocated > team_model_specific_rpm_limit:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Allocated RPM limit={model_specific_rpm_limit.get(model, 0)} + Key RPM limit={rpm_limit} is greater than team RPM limit={team_model_specific_rpm_limit}",
                 )
-                team_model_specific_rpm_limit = team_model_specific_rpm_limit_dict.get(
-                    model
-                )
-                if (
-                    model_specific_rpm_limit.get(model, 0) + rpm_limit
-                    > team_model_specific_rpm_limit
-                ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Allocated RPM limit={model_specific_rpm_limit.get(model, 0)} + Key RPM limit={rpm_limit} is greater than team RPM limit={team_model_specific_rpm_limit}",
-                    )
+
     if data.model_tpm_limit is not None:
+        team_metadata_tpm = team_metadata.get("model_tpm_limit", {})
+        team_tpm_limit = team_table.tpm_limit
         for model, tpm_limit in data.model_tpm_limit.items():
-            if (
-                team_table.tpm_limit is not None
-                and model_specific_tpm_limit.get(model, 0) + tpm_limit
-                > team_table.tpm_limit
-            ):
+            allocated = model_specific_tpm_limit.get(model, 0) + tpm_limit
+            if team_tpm_limit is not None and allocated > team_tpm_limit:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Allocated TPM limit={model_specific_tpm_limit.get(model, 0)} + Key TPM limit={tpm_limit} is greater than team TPM limit={team_table.tpm_limit}",
+                    detail=f"Allocated TPM limit={model_specific_tpm_limit.get(model, 0)} + Key TPM limit={tpm_limit} is greater than team TPM limit={team_tpm_limit}",
                 )
-            elif team_table.metadata and team_table.metadata.get("model_tpm_limit"):
-                team_model_specific_tpm_limit_dict = team_table.metadata.get(
-                    "model_tpm_limit", {}
+            team_model_specific_tpm_limit = team_metadata_tpm.get(model)
+            if (team_model_specific_tpm_limit is not None
+                and allocated > team_model_specific_tpm_limit):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Allocated TPM limit={model_specific_tpm_limit.get(model, 0)} + Key TPM limit={tpm_limit} is greater than team TPM limit={team_model_specific_tpm_limit}",
                 )
-                team_model_specific_tpm_limit = team_model_specific_tpm_limit_dict.get(
-                    model
-                )
-                if (
-                    team_model_specific_tpm_limit
-                    and model_specific_tpm_limit.get(model, 0) + tpm_limit
-                    > team_model_specific_tpm_limit
-                ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Allocated TPM limit={model_specific_tpm_limit.get(model, 0)} + Key TPM limit={tpm_limit} is greater than team TPM limit={team_model_specific_tpm_limit}",
-                    )
 
 
 def check_team_key_rpm_tpm_limits(
@@ -727,9 +710,10 @@ def check_team_key_rpm_tpm_limits(
     """
     Check if the team key is allocating rpm/tpm limits. If so, raise an error if we're overallocating.
     """
-    if keys is not None and len(keys) > 0:
-        allocated_tpm = sum(key.tpm_limit for key in keys if key.tpm_limit is not None)
-        allocated_rpm = sum(key.rpm_limit for key in keys if key.rpm_limit is not None)
+    if keys:
+        # Use generator expressions instead of list comprehensions for sum()
+        allocated_tpm = sum(key.tpm_limit or 0 for key in keys)
+        allocated_rpm = sum(key.rpm_limit or 0 for key in keys)
     else:
         allocated_tpm = 0
         allocated_rpm = 0
@@ -768,13 +752,10 @@ async def _check_team_key_limits(
         and data.rpm_limit_type != "guaranteed_throughput"
     ):
         return
-    # get all team keys
-    # calculate allocated tpm/rpm limit
-    # check if specified tpm/rpm limit is greater than allocated tpm/rpm limit
 
-    keys = await prisma_client.db.litellm_verificationtoken.find_many(
-        where={"team_id": team_table.team_id},
-    )
+    # Localize for fast attribute access
+    team_id = team_table.team_id
+    keys = await prisma_client.db.litellm_verificationtoken.find_many(where={"team_id": team_id})
     check_team_key_model_specific_limits(
         keys=keys,
         team_table=team_table,
