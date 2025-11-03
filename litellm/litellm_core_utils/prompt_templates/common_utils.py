@@ -51,6 +51,31 @@ DEFAULT_ASSISTANT_CONTINUE_MESSAGE = ChatCompletionAssistantMessage(
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as LoggingClass
 
+_extension_to_mime_type = {
+    # Images
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    # Videos
+    ".mp4": "video/mp4",
+    ".mov": "video/mov",
+    ".mpeg": "video/mpeg",   # .mpeg could map to either video/mpeg or audio/mpeg; original gives priority to video/mpeg, so keep that.
+    ".mpg": "video/mpeg",
+    ".avi": "video/avi",
+    ".wmv": "video/wmv",
+    ".mpegps": "video/mpegps",
+    ".flv": "video/flv",
+    # Audio
+    ".mp3": "audio/mp3",
+    ".wav": "audio/wav",
+    # Only map .mpeg once (to video/mpeg, matching original by order).
+    ".ogg": "audio/ogg",
+    # Documents
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+}
+
 
 def handle_any_messages_to_chat_completion_str_messages_conversion(
     messages: Any,
@@ -260,33 +285,29 @@ def _insert_user_continue_message(
     """
     if not messages:
         return messages
-
-    result_messages = messages.copy()  # Don't modify the input list
     continue_message = user_continue_message or DEFAULT_USER_CONTINUE_MESSAGE
+    N = len(messages)
+    # Pre-allocate output list, avoid repeated insertions
+    output: List[AllMessageValues] = []
+
+    idx = 0
 
     # Handle first message if it's an assistant message
-    if result_messages[0]["role"] == "assistant":
-        result_messages.insert(0, continue_message)
+    if messages[0]["role"] == "assistant":
+        output.append(continue_message)
+    output.append(messages[0])
 
-    # Handle consecutive assistant messages and final message
-    i = 1  # Start from second message since we handled first message
-    while i < len(result_messages):
-        curr_message = result_messages[i]
-        prev_message = result_messages[i - 1]
-
+    for idx in range(1, N):
         # Only check for consecutive assistant messages
-        # Ignore all other role types
-        if curr_message["role"] == "assistant" and prev_message["role"] == "assistant":
-            result_messages.insert(i, continue_message)
-            i += 2  # Skip over the message we just inserted
-        else:
-            i += 1
+        if messages[idx]["role"] == "assistant" and messages[idx - 1]["role"] == "assistant":
+            output.append(continue_message)
+        output.append(messages[idx])
 
     # Handle final message
-    if result_messages[-1]["role"] == "assistant" and ensure_alternating_roles:
-        result_messages.append(continue_message)
+    if output[-1]["role"] == "assistant" and ensure_alternating_roles:
+        output.append(continue_message)
 
-    return result_messages
+    return output
 
 
 def _insert_assistant_continue_message(
@@ -621,36 +642,13 @@ def _get_image_mime_type_from_url(url: str) -> Optional[str]:
     video/flv
     """
     url = url.lower()
-
-    # Map file extensions to mime types
-    mime_types = {
-        # Images
-        (".jpg", ".jpeg"): "image/jpeg",
-        (".png",): "image/png",
-        (".webp",): "image/webp",
-        # Videos
-        (".mp4",): "video/mp4",
-        (".mov",): "video/mov",
-        (".mpeg", ".mpg"): "video/mpeg",
-        (".avi",): "video/avi",
-        (".wmv",): "video/wmv",
-        (".mpegps",): "video/mpegps",
-        (".flv",): "video/flv",
-        # Audio
-        (".mp3",): "audio/mp3",
-        (".wav",): "audio/wav",
-        (".mpeg",): "audio/mpeg",
-        (".ogg",): "audio/ogg",
-        # Documents
-        (".pdf",): "application/pdf",
-        (".txt",): "text/plain",
-    }
-
-    # Check each extension group against the URL
-    for extensions, mime_type in mime_types.items():
-        if any(url.endswith(ext) for ext in extensions):
-            return mime_type
-
+    # Try each extension in order of descending length for maximum
+    # correctness (prevents .mpg matching before .mpeg).
+    # Create a sorted tuple of extensions, descending by length
+    extensions = tuple(sorted(_extension_to_mime_type, key=len, reverse=True))
+    for ext in extensions:
+        if url.endswith(ext):
+            return _extension_to_mime_type[ext]
     return None
 
 
