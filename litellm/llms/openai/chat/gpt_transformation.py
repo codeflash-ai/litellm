@@ -120,12 +120,20 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         top_p: Optional[int] = None,
         response_format: Optional[dict] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
-
-        self.__class__._is_base_class = False
+        # Optimize by setting instance attributes, not class attributes.
+        # Setting attributes on the class can cause unwanted shared state and is slower.
+        self.frequency_penalty = frequency_penalty
+        self.function_call = function_call
+        self.functions = functions
+        self.logit_bias = logit_bias
+        self.max_tokens = max_tokens
+        self.n = n
+        self.presence_penalty = presence_penalty
+        self.stop = stop
+        self.temperature = temperature
+        self.top_p = top_p
+        self.response_format = response_format
+        self._is_base_class = False  # instance variable to allow safe behavior preservation
 
     @classmethod
     def get_config(cls):
