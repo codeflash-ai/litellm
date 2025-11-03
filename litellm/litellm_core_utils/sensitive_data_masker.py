@@ -30,28 +30,34 @@ class SensitiveDataMasker:
         self.mask_char = mask_char
 
     def _mask_value(self, value: str) -> str:
-        if not value or len(str(value)) < (self.visible_prefix + self.visible_suffix):
+        # Avoid double str() call and handle empty string faster
+        if not value:
             return value
 
         value_str = str(value)
-        masked_length = len(value_str) - (self.visible_prefix + self.visible_suffix)
+        val_len = len(value_str)
+        prefix = self.visible_prefix
+        suffix = self.visible_suffix
 
-        # Handle the case where visible_suffix is 0 to avoid showing the entire string
-        if self.visible_suffix == 0:
-            return f"{value_str[:self.visible_prefix]}{self.mask_char * masked_length}"
+        # Fast-path if too short to mask
+        if val_len < (prefix + suffix):
+            return value
+
+        masked_length = val_len - (prefix + suffix)
+        # Avoid string concatenation overhead with f-strings for large masked_length
+        if suffix == 0:
+            # Only prefix and mask (no suffix)
+            return value_str[:prefix] + (self.mask_char * masked_length)
         else:
-            return f"{value_str[:self.visible_prefix]}{self.mask_char * masked_length}{value_str[-self.visible_suffix:]}"
+            return value_str[:prefix] + (self.mask_char * masked_length) + value_str[-suffix:]
 
     def is_sensitive_key(self, key: str) -> bool:
         key_lower = str(key).lower()
         # Split on underscores and check if any segment matches the pattern
         # This avoids false positives like "max_tokens" matching "token"
         # but still catches "api_key", "access_token", etc.
-        key_segments = key_lower.replace('-', '_').split('_')
-        result = any(
-            pattern in key_segments
-            for pattern in self.sensitive_patterns
-        )
+        key_segments = key_lower.replace("-", "_").split("_")
+        result = any(pattern in key_segments for pattern in self.sensitive_patterns)
         return result
 
     def mask_dict(
@@ -74,9 +80,7 @@ class SensitiveDataMasker:
                     str_value = str(v) if v is not None else ""
                     masked_data[k] = self._mask_value(str_value)
                 else:
-                    masked_data[k] = (
-                        v if isinstance(v, (int, float, bool, str, list)) else str(v)
-                    )
+                    masked_data[k] = v if isinstance(v, (int, float, bool, str, list)) else str(v)
             except Exception:
                 masked_data[k] = "<unable to serialize>"
 
