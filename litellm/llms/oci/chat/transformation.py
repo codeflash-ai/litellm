@@ -178,7 +178,7 @@ class OCIChatConfig(BaseConfig):
         }
 
         # Cohere and Gemini use the same parameter mapping as GENERIC
-        self.openai_to_oci_cohere_param_map = self.openai_to_oci_generic_param_map.copy()
+        self.openai_to_oci_cohere_param_map = self.openai_to_oci_generic_param_map
 
     def get_supported_openai_params(self, model: str) -> List[str]:
         supported_params = []
@@ -395,12 +395,10 @@ class OCIChatConfig(BaseConfig):
                 "Either `api_base` must be provided or `litellm.api_base` must be set. Alternatively, you can set the `oci_region` optional parameter to use the default OCI region."
             )
 
-        headers.update(
-            {
-                "content-type": "application/json",
-                "user-agent": f"litellm/{version}",
-            }
-        )
+        # Update headers using a single call
+        headers["content-type"] = "application/json"
+        headers["user-agent"] = f"litellm/{version}"
+
 
         if not messages:
             raise Exception(
