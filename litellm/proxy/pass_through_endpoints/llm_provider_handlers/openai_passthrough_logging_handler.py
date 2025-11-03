@@ -66,14 +66,22 @@ class OpenAIPassthroughLoggingHandler(BasePassthroughLoggingHandler):
         """Check if the URL route is an OpenAI image generation endpoint."""
         if not url_route:
             return False
+        # Fast substring checks for performance before urlparse
+        if (
+            "/v1/images/generations" not in url_route
+            or ("api.openai.com" not in url_route and "openai.azure.com" not in url_route)
+        ):
+            return False
+        # Only parse URL if string checks pass, reducing urlparse cost
         parsed_url = urlparse(url_route)
-        return bool(
-            parsed_url.hostname
+        hostname = parsed_url.hostname
+        path = parsed_url.path
+        return (
+            hostname is not None
             and (
-                "api.openai.com" in parsed_url.hostname
-                or "openai.azure.com" in parsed_url.hostname
+                "api.openai.com" in hostname or "openai.azure.com" in hostname
             )
-            and "/v1/images/generations" in parsed_url.path
+            and "/v1/images/generations" in path
         )
 
     @staticmethod
