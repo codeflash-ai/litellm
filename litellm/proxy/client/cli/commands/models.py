@@ -316,7 +316,6 @@ def update_model(ctx: click.Context, model_id: str, param: tuple[str, ...], info
 def _filter_model(model, model_regex, access_group_regex):
     model_name = model.get("model_name")
     model_params = model.get("litellm_params")
-    model_info = model.get("model_info", {})
     if not model_name or not model_params:
         return False
     model_id = model_params.get("model")
@@ -324,12 +323,15 @@ def _filter_model(model, model_regex, access_group_regex):
         return False
     if model_regex and not model_regex.search(model_id):
         return False
-    access_groups = model_info.get("access_groups", [])
     if access_group_regex:
+        model_info = model.get("model_info", {})
+        access_groups = model_info.get("access_groups", [])
         if not isinstance(access_groups, list):
             return False
-        if not any(isinstance(group, str) and access_group_regex.search(group) for group in access_groups):
-            return False
+        for group in access_groups:
+            if isinstance(group, str) and access_group_regex.search(group):
+                return True
+        return False
     return True
 
 
