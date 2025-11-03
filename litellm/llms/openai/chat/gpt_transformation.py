@@ -120,9 +120,22 @@ class OpenAIGPTConfig(BaseLLMModelInfo, BaseConfig):
         top_p: Optional[int] = None,
         response_format: Optional[dict] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
+        # Avoid copy of full locals(), only iterate on argument names
+        for key in (
+                'frequency_penalty',
+                'function_call',
+                'functions',
+                'logit_bias',
+                'max_tokens',
+                'n',
+                'presence_penalty',
+                'stop',
+                'temperature',
+                'top_p',
+                'response_format',
+        ):
+            value = locals()[key]
+            if value is not None:
                 setattr(self.__class__, key, value)
 
         self.__class__._is_base_class = False
