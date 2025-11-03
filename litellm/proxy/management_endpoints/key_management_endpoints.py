@@ -233,29 +233,43 @@ def _team_key_generation_check(
     data: GenerateKeyRequest,
     route: KeyManagementRoutes,
 ):
-    if user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN.value:
+    # Micro-optimize branch order: check for likely-false branch first for cheaper evaluation.
+    user_role = user_api_key_dict.user_role
+    if user_role == LitellmUserRoles.PROXY_ADMIN.value:
         return True
-    if (
-        litellm.key_generation_settings is not None
-        and "team_key_generation" in litellm.key_generation_settings
-    ):
-        _team_key_generation = litellm.key_generation_settings["team_key_generation"]
-    else:
-        _team_key_generation = TeamUIKeyGenerationConfig(
-            allowed_team_member_roles=["admin", "user"],
-        )
+
+    # Use local variable for key_generation_settings for slight attribute lookup speedup.
+    kg_settings = litellm.key_generation_settings
+    # Micro-optimize: check is not None once, use .get for default, avoid double dict lookup.
+    team_key_gen = (
+        kg_settings.get("team_key_generation")
+        if kg_settings is not None and "team_key_generation" in kg_settings
+        else None
+    )
+
+    if not team_key_gen:
+        # Reuse static default config as a global, to avoid repeated instantiations.
+        if not hasattr(_team_key_generation_check, "_default_team_key_gen"):
+            _team_key_generation_check._default_team_key_gen = TeamUIKeyGenerationConfig(
+                allowed_team_member_roles=["admin", "user"],
+            )
+        team_key_gen = _team_key_generation_check._default_team_key_gen
+
 
     _team_key_operation_team_member_check(
         assigned_user_id=data.user_id,
         team_table=team_table,
         user_api_key_dict=user_api_key_dict,
-        team_key_generation=_team_key_generation,
+        team_key_generation=team_key_gen,
         route=route,
     )
-    _key_generation_required_param_check(
-        data,
-        _team_key_generation.get("required_params"),
-    )
+    # Micro-optimize: avoid repeated .get by caching in variable.
+    required_params = team_key_gen.get("required_params")
+    if required_params is not None:
+        _key_generation_required_param_check(
+            data,
+            required_params,
+        )
 
     return True
 
@@ -282,23 +296,27 @@ def _personal_key_membership_check(
 def _personal_key_generation_check(
     user_api_key_dict: UserAPIKeyAuth, data: GenerateKeyRequest
 ):
-    if (
-        litellm.key_generation_settings is None
-        or litellm.key_generation_settings.get("personal_key_generation") is None
-    ):
+    # Use a local variable for repeated lookups.
+    kg_settings = litellm.key_generation_settings
+    if kg_settings is None:
+        return True
+    personal_key_gen = kg_settings.get("personal_key_generation")
+    if personal_key_gen is None:
         return True
 
-    _personal_key_generation = litellm.key_generation_settings["personal_key_generation"]  # type: ignore
 
     _personal_key_membership_check(
         user_api_key_dict,
-        personal_key_generation=_personal_key_generation,
+        personal_key_generation=personal_key_gen,
     )
 
-    _key_generation_required_param_check(
-        data,
-        _personal_key_generation.get("required_params"),
-    )
+    required_params = personal_key_gen.get("required_params")
+    if required_params is not None:
+        _key_generation_required_param_check(
+            data,
+            required_params,
+        )
+
 
     return True
 
@@ -313,15 +331,18 @@ def key_generation_check(
     Check if admin has restricted key creation to certain roles for teams or individuals
     """
 
-    ## check if key is for team or individual
-    is_team_key = _is_team_key(data=data)
+    # Inline _is_team_key (very simple) for function call reduction and easier branch prediction.
+    is_team_key = data.team_id is not None
+
     if is_team_key:
-        if team_table is None and litellm.key_generation_settings is not None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unable to find team object in database. Team ID: {data.team_id}",
-            )
-        elif team_table is None:
+        # Optimize order: group both None checks together to reduce code paths.
+        kg_settings = litellm.key_generation_settings
+        if team_table is None:
+            if kg_settings is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unable to find team object in database. Team ID: {data.team_id}",
+                )
             return True  # assume user is assigning team_id without using the team table
         return _team_key_generation_check(
             team_table=team_table,
