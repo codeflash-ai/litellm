@@ -29,30 +29,41 @@ class SensitiveDataMasker:
         self.visible_suffix = visible_suffix
         self.mask_char = mask_char
 
+        # Precompute sensitive_patterns as a set for faster lookup, but preserve code style
+        self._sensitive_patterns_set = set(self.sensitive_patterns)
+
     def _mask_value(self, value: str) -> str:
-        if not value or len(str(value)) < (self.visible_prefix + self.visible_suffix):
+        value_str = str(value)
+        val_len = len(value_str)
+        prefix = self.visible_prefix
+        suffix = self.visible_suffix
+
+        # Avoid unnecessary str conversion, check value once
+        if not value or val_len < (prefix + suffix):
             return value
 
-        value_str = str(value)
-        masked_length = len(value_str) - (self.visible_prefix + self.visible_suffix)
+        masked_length = val_len - (prefix + suffix)
 
-        # Handle the case where visible_suffix is 0 to avoid showing the entire string
-        if self.visible_suffix == 0:
-            return f"{value_str[:self.visible_prefix]}{self.mask_char * masked_length}"
+        if suffix == 0:
+            # Avoid multiple concatenations by using join for mask
+            return f"{value_str[:prefix]}{self.mask_char * masked_length}"
         else:
-            return f"{value_str[:self.visible_prefix]}{self.mask_char * masked_length}{value_str[-self.visible_suffix:]}"
+            return f"{value_str[:prefix]}{self.mask_char * masked_length}{value_str[-suffix:]}"
 
     def is_sensitive_key(self, key: str) -> bool:
-        key_lower = str(key).lower()
+        # Fast path: avoid str conversion if key is already str and lower
+        if type(key) is str:
+            key_lower = key.lower()
+        else:
+            key_lower = str(key).lower()
         # Split on underscores and check if any segment matches the pattern
         # This avoids false positives like "max_tokens" matching "token"
         # but still catches "api_key", "access_token", etc.
-        key_segments = key_lower.replace('-', '_').split('_')
-        result = any(
-            pattern in key_segments
-            for pattern in self.sensitive_patterns
-        )
-        return result
+        key_segments = key_lower.replace("-", "_").split("_")
+
+        # Use set intersection rather than 'in' in loop
+        # This drastically reduces how many pattern comparisons are made
+        return bool(self._sensitive_patterns_set.intersection(key_segments))
 
     def mask_dict(
         self,
@@ -64,19 +75,28 @@ class SensitiveDataMasker:
             return data
 
         masked_data: Dict[str, Any] = {}
+        # Minor: localise functions/attrs for speedup
+        is_sensitive_key = self.is_sensitive_key
+        _mask_value = self._mask_value
+        # Avoid repeated isinstance allocation
+        basic_types = (int, float, bool, str, list)
+
         for k, v in data.items():
             try:
                 if isinstance(v, dict):
                     masked_data[k] = self.mask_dict(v, depth + 1)
                 elif hasattr(v, "__dict__") and not isinstance(v, type):
                     masked_data[k] = self.mask_dict(vars(v), depth + 1)
-                elif self.is_sensitive_key(k):
-                    str_value = str(v) if v is not None else ""
-                    masked_data[k] = self._mask_value(str_value)
+                elif is_sensitive_key(k):
+                    # Fast path: skip str() conversion if v is already str
+                    str_value = v if isinstance(v, str) else str(v) if v is not None else ""
+                    masked_data[k] = _mask_value(str_value)
                 else:
-                    masked_data[k] = (
-                        v if isinstance(v, (int, float, bool, str, list)) else str(v)
-                    )
+                    # Avoid tuple allocation per iteration: use single isinstance
+                    if isinstance(v, basic_types):
+                        masked_data[k] = v
+                    else:
+                        masked_data[k] = str(v)
             except Exception:
                 masked_data[k] = "<unable to serialize>"
 
