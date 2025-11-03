@@ -16,6 +16,14 @@ class CredentialsManagementClient:
         self._base_url = base_url.rstrip("/")  # Remove trailing slash if present
         self._api_key = api_key
 
+        # Precompute headers for faster usage; Content-Type always present, Authorization may be added
+        base_headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            base_headers["Authorization"] = f"Bearer {self._api_key}"
+        self._headers = base_headers
+        # Session can be reused for efficiency instead of creating for every request
+        self._session = requests.Session()
+
     def _get_headers(self) -> Dict[str, str]:
         """
         Get the headers for API requests, including authorization if api_key is set.
@@ -23,10 +31,8 @@ class CredentialsManagementClient:
         Returns:
             Dict[str, str]: Headers to use for API requests
         """
-        headers = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
+        # Return prebuilt headers. If header mutability outside this function is a concern, use .copy()
+        return self._headers
 
     def list(
         self,
@@ -136,10 +142,8 @@ class CredentialsManagementClient:
 
         if return_request:
             return request
-
-        session = requests.Session()
         try:
-            response = session.send(request.prepare())
+            response = self._session.send(request.prepare())
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
