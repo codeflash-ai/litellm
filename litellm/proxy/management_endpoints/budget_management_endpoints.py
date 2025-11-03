@@ -107,14 +107,14 @@ async def update_budget(
     if budget_obj.budget_id is None:
         raise HTTPException(status_code=400, detail={"error": "budget_id is required"})
 
+    update_data = budget_obj.model_dump(exclude_none=True)  # type: ignore
+    update_data["updated_by"] = user_api_key_dict.user_id or litellm_proxy_admin_name
+
+    # Single await maintained (no batching needed here, but ready for future)
     response = await prisma_client.db.litellm_budgettable.update(
         where={"budget_id": budget_obj.budget_id},
-        data={
-            **budget_obj.model_dump(exclude_none=True),  # type: ignore
-            "updated_by": user_api_key_dict.user_id or litellm_proxy_admin_name,
-        },  # type: ignore
+        data=update_data,  # type: ignore
     )
-
     return response
 
 
@@ -138,9 +138,7 @@ async def info_budget(data: BudgetRequest):
     if len(data.budgets) == 0:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"Specify list of budget id's to query. Passed in={data.budgets}"
-            },
+            detail={"error": f"Specify list of budget id's to query. Passed in={data.budgets}"},
         )
     response = await prisma_client.db.litellm_budgettable.find_many(
         where={"budget_id": {"in": data.budgets}},
@@ -186,9 +184,7 @@ async def budget_settings(
         )
 
     ## get budget item from db
-    db_budget_row = await prisma_client.db.litellm_budgettable.find_first(
-        where={"budget_id": budget_id}
-    )
+    db_budget_row = await prisma_client.db.litellm_budgettable.find_first(where={"budget_id": budget_id})
 
     if db_budget_row is not None:
         db_budget_row_dict = db_budget_row.model_dump(exclude_none=True)
@@ -290,8 +286,6 @@ async def delete_budget(
             },
         )
 
-    response = await prisma_client.db.litellm_budgettable.delete(
-        where={"budget_id": data.id}
-    )
+    response = await prisma_client.db.litellm_budgettable.delete(where={"budget_id": data.id})
 
     return response
