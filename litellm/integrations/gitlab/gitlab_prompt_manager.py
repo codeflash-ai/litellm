@@ -198,12 +198,6 @@ class GitLabTemplateManager:
         """
         List available prompt IDs discovered under prompts_path (no extension, relative to prompts_path).
         """
-        """
-        List available prompt IDs under prompts_path (no extension).
-        Compatible with both list_files signatures:
-        - list_files(directory_path=..., file_extension=..., recursive=...)
-        - list_files(path=..., ref=None, recursive=...)
-        """
         # First try the "new" signature (directory_path/file_extension)
         try:
             files = self.gitlab_client.list_files(
@@ -213,14 +207,22 @@ class GitLabTemplateManager:
             )
             base = self.prompts_path.strip("/")
             out: List[str] = []
+            base_prefix = (base + "/") if base else ""
+            base_prefix_len = len(base_prefix)
+            appnd = out.append
+            # Single pass: efficient filtering
             for p in files or []:
                 path = str(p).strip("/")
-                if base and not path.startswith(base + "/"):
+                if base and not path.startswith(base_prefix):
                     # if the client returns extra files outside the folder, skip them
                     continue
                 if not path.endswith(".prompt"):
                     continue
-                out.append(self._repo_path_to_id(path))
+                # Remove base + '/' only if present (since path already checked to start with base_prefix)
+                id_path = path[base_prefix_len:] if base else path
+                # Remove .prompt extension
+                id_path = id_path[:-7]
+                appnd(id_path)
             return out
         except TypeError:
             # Fallback to the "classic" signature
@@ -231,11 +233,27 @@ class GitLabTemplateManager:
             )
             # Classic returns GitLab tree entries; filter *.prompt blobs
             files = []
+            appnd = files.append
             for f in (raw or []):
-                if isinstance(f, dict) and f.get("type") == "blob" and str(f.get("path", "")).endswith(".prompt") and 'path' in f:
-                    files.append(f['path'])
+                # Fast path: no not-needed str() conversion or redundant checks
+                if isinstance(f, dict) and f.get("type") == "blob":
+                    fp = f.get("path", "")
+                    if fp.endswith(".prompt") and 'path' in f:
+                        appnd(fp)
 
-            return [self._repo_path_to_id(p) for p in files]
+            base = self.prompts_path.strip("/")
+            base_prefix = (base + "/") if base else ""
+            base_prefix_len = len(base_prefix)
+            result: List[str] = []
+            appnd_result = result.append
+            for p in files:
+                path = str(p).strip("/")
+                if base and not path.startswith(base_prefix):
+                    continue
+                id_path = path[base_prefix_len:] if base else path
+                id_path = id_path[:-7]
+                appnd_result(id_path)
+            return result
 
 
 class GitLabPromptManager(CustomPromptManagement):
