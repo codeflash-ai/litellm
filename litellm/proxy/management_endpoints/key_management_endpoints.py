@@ -2131,7 +2131,7 @@ async def can_delete_verification_token(
     - check if user is team admin and key is a team key
     - check if key is personal key
     """
-    is_team_key = _is_team_key(data=key_info)
+    is_team_key = key_info.team_id is not None
     if user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN.value:
         return True
     elif is_team_key and key_info.team_id is not None:
