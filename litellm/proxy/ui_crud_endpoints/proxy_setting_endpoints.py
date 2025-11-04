@@ -11,6 +11,7 @@ from litellm.types.proxy.management_endpoints.ui_sso import (
     DefaultTeamSSOParams,
     SSOConfig,
 )
+import functools
 
 router = APIRouter()
 
@@ -172,15 +173,16 @@ async def _get_settings_with_schema(
         settings_class: The Pydantic class to use for schema
         config: The config dictionary
     """
-    from pydantic import TypeAdapter
 
     litellm_settings = config.get("litellm_settings", {}) or {}
     settings_data = litellm_settings.get(settings_key, {}) or {}
 
     # Create the settings object
     settings = settings_class(**(settings_data))
-    # Get the schema
-    schema = TypeAdapter(settings_class).json_schema(by_alias=True)
+    # Use cached schema generation
+    schema = get_class_schema(settings_class)
+
+    # Convert to dict for response
 
     # Convert to dict for response
     settings_dict = settings.model_dump()
@@ -688,3 +690,8 @@ async def upload_logo(file: UploadFile = File(...)):
         "filename": unique_filename,
         "file_size": len(file_content),
     }
+
+@functools.lru_cache(maxsize=32)
+def get_class_schema(settings_class: type) -> dict:
+    from pydantic import TypeAdapter
+    return TypeAdapter(settings_class).json_schema(by_alias=True)
