@@ -20,13 +20,10 @@ class VertexAIError(Exception):
     def __init__(self, status_code, message):
         self.status_code = status_code
         self.message = message
-        self.request = httpx.Request(
-            method="POST", url=" https://cloud.google.com/vertex-ai/"
-        )
+        self.request = httpx.Request(method="POST", url=" https://cloud.google.com/vertex-ai/")
         self.response = httpx.Response(status_code=status_code, request=self.request)
-        super().__init__(
-            self.message
-        )  # Call the base class constructor with the parameters it needs
+        super().__init__(self.message)  # Call the base class constructor with the parameters it needs
+
 
 class PartnerModelPrefixes(str, Enum):
     META_PREFIX = "meta/"
@@ -64,17 +61,23 @@ class VertexAIPartnerModels(VertexBase):
         ):
             return True
         return False
-    
+
     @staticmethod
     def should_use_openai_handler(model: str):
-        OPENAI_LIKE_VERTEX_PROVIDERS = [
-            "llama",
-            PartnerModelPrefixes.DEEPSEEK_PREFIX,
-            PartnerModelPrefixes.QWEN_PREFIX,
-            PartnerModelPrefixes.GPT_OSS_PREFIX,
-        ]
-        if any(provider in model for provider in OPENAI_LIKE_VERTEX_PROVIDERS):
-            return True
+        # Hoist the OPENAI_LIKE_VERTEX_PROVIDERS construction once, not per call
+        # Use a tuple for faster iteration and avoid per-call list allocation
+        if not hasattr(VertexAIPartnerModels, "_OPENAI_LIKE_VERTEX_PROVIDERS"):
+            VertexAIPartnerModels._OPENAI_LIKE_VERTEX_PROVIDERS = (
+                "llama",
+                PartnerModelPrefixes.DEEPSEEK_PREFIX,
+                PartnerModelPrefixes.QWEN_PREFIX,
+                PartnerModelPrefixes.GPT_OSS_PREFIX,
+            )
+        providers = VertexAIPartnerModels._OPENAI_LIKE_VERTEX_PROVIDERS
+        # The following generator is rewritten as a for-loop for performance
+        for provider in providers:
+            if provider in model:
+                return True
         return False
 
     def completion(
@@ -115,9 +118,7 @@ class VertexAIPartnerModels(VertexBase):
                 message=f"""vertexai import failed please run `pip install -U "google-cloud-aiplatform>=1.38"`. Got error: {e}""",
             )
 
-        if not (
-            hasattr(vertexai, "preview") or hasattr(vertexai.preview, "language_models")
-        ):
+        if not (hasattr(vertexai, "preview") or hasattr(vertexai.preview, "language_models")):
             raise VertexAIError(
                 status_code=400,
                 message="""Upgrade vertex ai. Run `pip install "google-cloud-aiplatform>=1.38"`""",
@@ -166,9 +167,7 @@ class VertexAIPartnerModels(VertexBase):
 
             if "codestral" in model and litellm_params.get("text_completion") is True:
                 optional_params["model"] = model
-                text_completion_model_response = litellm.TextCompletionResponse(
-                    stream=stream
-                )
+                text_completion_model_response = litellm.TextCompletionResponse(stream=stream)
                 return codestral_fim_completions.completion(
                     model=model,
                     messages=messages,
