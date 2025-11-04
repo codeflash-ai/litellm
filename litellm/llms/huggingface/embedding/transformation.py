@@ -337,17 +337,21 @@ class HuggingFaceEmbeddingConfig(BaseConfig):
         Do not add the chat/embedding/rerank extension here. Let the handler do this.
         """
         if "https" in model:
-            completion_url = model
-        elif api_base is not None:
-            completion_url = api_base
-        elif "HF_API_BASE" in os.environ:
-            completion_url = os.getenv("HF_API_BASE", "")
-        elif "HUGGINGFACE_API_BASE" in os.environ:
-            completion_url = os.getenv("HUGGINGFACE_API_BASE", "")
-        else:
-            completion_url = f"https://api-inference.huggingface.co/models/{model}"
-
-        return completion_url
+            return model
+        # Second branch check if api_base provided directly
+        if api_base is not None:
+            return api_base
+        # Minimize repeated os.environ lookups by caching environment separately
+        environ = os.environ
+        # Use 'in' lookups directly as that's faster than os.getenv if not needed
+        hf_base = environ.get("HF_API_BASE")
+        if hf_base is not None:
+            return hf_base
+        huggingface_base = environ.get("HUGGINGFACE_API_BASE")
+        if huggingface_base is not None:
+            return huggingface_base
+        # Fallback
+        return f"https://api-inference.huggingface.co/models/{model}"
 
     def validate_environment(
         self,
