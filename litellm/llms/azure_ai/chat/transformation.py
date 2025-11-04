@@ -1,6 +1,6 @@
 import enum
 from typing import Any, List, Optional, Tuple, cast
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlunparse, urlparse
 
 import httpx
 from httpx import Response
@@ -112,13 +112,18 @@ class AzureAIStudioConfig(OpenAIConfig):
             raise ValueError(
                 f"api_base is required for Azure AI Studio. Please set the api_base parameter. Passed `api_base={api_base}`"
             )
-        original_url = httpx.URL(api_base)
+
+        # Parse the api_base once (cheaper than httpx.URL)
+        parsed = urlparse(api_base)
+        orig_query = dict(parse_qsl(parsed.query))
+
+        # Extract api_version or use default
 
         # Extract api_version or use default
         api_version = cast(Optional[str], litellm_params.get("api_version"))
 
-        # Create a new dictionary with existing params
-        query_params = dict(original_url.params)
+        # Update query params with api_version if not already present
+        query_params = orig_query.copy()
 
         # Add api_version if needed
         if "api-version" not in query_params and api_version:
@@ -126,14 +131,23 @@ class AzureAIStudioConfig(OpenAIConfig):
 
         # Add the path to the base URL
         if "services.ai.azure.com" in api_base:
-            new_url = _add_path_to_api_base(api_base=api_base, ending_path="/models/chat/completions")
+            new_url_wo_query = _add_path_to_api_base(api_base=api_base, ending_path="/models/chat/completions")
         else:
-            new_url = _add_path_to_api_base(api_base=api_base, ending_path="/chat/completions")
+            new_url_wo_query = _add_path_to_api_base(api_base=api_base, ending_path="/chat/completions")
 
-        # Use the new query_params dictionary
-        final_url = httpx.URL(new_url).copy_with(params=query_params)
-
-        return str(final_url)
+        # Now add the possibly-updated query string
+        parsed2 = urlparse(new_url_wo_query)
+        final_url = urlunparse(
+            (
+                parsed2.scheme,
+                parsed2.netloc,
+                parsed2.path,
+                parsed2.params,
+                urlencode(query_params, doseq=True),
+                parsed2.fragment,
+            )
+        )
+        return final_url
 
     def get_required_params(self) -> List[ProviderField]:
         """For a given provider, return it's required fields with a description"""
