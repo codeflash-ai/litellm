@@ -49,11 +49,23 @@ def output_parser(generated_text: str):
     Initial issue that prompted this - https://github.com/BerriAI/litellm/issues/763
     """
     chat_template_tokens = ["<|assistant|>", "<|system|>", "<|user|>", "<s>", "</s>"]
+    stripped_text = generated_text.strip()
     for token in chat_template_tokens:
-        if generated_text.strip().startswith(token):
-            generated_text = generated_text.replace(token, "", 1)
+        # Only attempt replacement when needed to minimize allocations
+        if stripped_text.startswith(token):
+            # Find the start index of token after stripping leading whitespace
+            start_index = generated_text.find(token)
+            if start_index != -1:
+                generated_text = generated_text[:start_index] + generated_text[start_index + len(token) :]
+                # update stripped_text for further token checks on modified text
+                stripped_text = generated_text.strip()
         if generated_text.endswith(token):
-            generated_text = generated_text[::-1].replace(token[::-1], "", 1)[::-1]
+            # Find the end index of token directly from the tail
+            end_index = generated_text.rfind(token)
+            if end_index != -1 and end_index + len(token) == len(generated_text):
+                generated_text = generated_text[:end_index] + generated_text[end_index + len(token) :]
+                # no need to re-strip here, as we do not check stripped_text for endswith
+
     return generated_text
 
 
