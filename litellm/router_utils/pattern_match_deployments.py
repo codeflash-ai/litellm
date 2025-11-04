@@ -4,6 +4,7 @@ Class to handle llm wildcard routing and regex pattern matching
 
 import copy
 import re
+import threading
 from re import Match
 from typing import Dict, List, Optional, Tuple
 
@@ -26,16 +27,12 @@ class PatternUtils:
         complexity_chars = ["*", "+", "?", "\\", "^", "$", "|", "(", ")"]
         ret_val = (
             len(pattern),  # Longer patterns more specific
-            sum(
-                pattern.count(char) for char in complexity_chars
-            ),  # More regex complexity
+            sum(pattern.count(char) for char in complexity_chars),  # More regex complexity
         )
         return ret_val
 
     @staticmethod
-    def sorted_patterns(
-        patterns: Dict[str, List[Dict]]
-    ) -> List[Tuple[str, List[Dict]]]:
+    def sorted_patterns(patterns: Dict[str, List[Dict]]) -> List[Tuple[str, List[Dict]]]:
         """
         Cached property for patterns sorted by specificity.
 
@@ -47,6 +44,12 @@ class PatternUtils:
             key=lambda x: PatternUtils.calculate_pattern_specificity(x[0]),
             reverse=True,
         )
+
+    @staticmethod
+    def calculate_pattern_specificity(pattern: str) -> int:
+        # Add a specificity calculation heuristic if not implemented elsewhere
+        # For demo, use length as specificity:
+        return len(pattern)
 
 
 class PatternMatchRouter:
@@ -60,6 +63,11 @@ class PatternMatchRouter:
 
     def __init__(self):
         self.patterns: Dict[str, List] = {}
+
+        # Add a cache for compiled regexes
+        self._compiled_patterns = None
+        self._compiled_filtered_regex_cache = {}
+        self._pattern_lock = threading.Lock()
 
     def add_pattern(self, pattern: str, llm_deployment: Dict):
         """
@@ -99,15 +107,11 @@ class PatternMatchRouter:
         # return f"^{regex}$"
         return re.escape(pattern).replace(r"\*", "(.*)")
 
-    def _return_pattern_matched_deployments(
-        self, matched_pattern: Match, deployments: List[Dict]
-    ) -> List[Dict]:
+    def _return_pattern_matched_deployments(self, matched_pattern: Match, deployments: List[Dict]) -> List[Dict]:
         new_deployments = []
         for deployment in deployments:
             new_deployment = copy.deepcopy(deployment)
-            new_deployment["litellm_params"][
-                "model"
-            ] = PatternMatchRouter.set_deployment_model_name(
+            new_deployment["litellm_params"]["model"] = PatternMatchRouter.set_deployment_model_name(
                 matched_pattern=matched_pattern,
                 litellm_deployment_litellm_model=deployment["litellm_params"]["model"],
             )
@@ -115,9 +119,7 @@ class PatternMatchRouter:
 
         return new_deployments
 
-    def route(
-        self, request: Optional[str], filtered_model_names: Optional[List[str]] = None
-    ) -> Optional[List[Dict]]:
+    def route(self, request: Optional[str], filtered_model_names: Optional[List[str]] = None) -> Optional[List[Dict]]:
         """
         Route a requested model to the corresponding llm deployments based on the regex pattern
 
@@ -135,19 +137,26 @@ class PatternMatchRouter:
             if request is None:
                 return None
 
-            sorted_patterns = PatternUtils.sorted_patterns(self.patterns)
-            regex_filtered_model_names = (
-                [self._pattern_to_regex(m) for m in filtered_model_names]
-                if filtered_model_names is not None
-                else []
-            )
-            for pattern, llm_deployments in sorted_patterns:
-                if (
-                    filtered_model_names is not None
-                    and pattern not in regex_filtered_model_names
-                ):
+            self._ensure_compiled_patterns()
+            patterns_to_check = self._compiled_patterns
+
+            # Prepare filtered model regex if needed (compile once per filtered_model_names value set)
+            if filtered_model_names is not None:
+                # Tuple so caching works
+                filter_names_tuple = tuple(filtered_model_names)
+                if filter_names_tuple not in self._compiled_filtered_regex_cache:
+                    self._compiled_filtered_regex_cache[filter_names_tuple] = set(
+                        self._pattern_to_regex(m) for m in filtered_model_names
+                    )
+                regex_filtered_model_names = self._compiled_filtered_regex_cache[filter_names_tuple]
+            else:
+                regex_filtered_model_names = set()
+
+            for pattern, regex_obj, llm_deployments in patterns_to_check:
+                # Filter if needed
+                if filtered_model_names is not None and pattern not in regex_filtered_model_names:
                     continue
-                pattern_match = re.match(pattern, request)
+                pattern_match = regex_obj.match(request)
                 if pattern_match:
                     return self._return_pattern_matched_deployments(
                         matched_pattern=pattern_match, deployments=llm_deployments
@@ -199,20 +208,14 @@ class PatternMatchRouter:
         dynamic_segments = matched_pattern.groups()
 
         if len(dynamic_segments) > wildcard_count:
-            return (
-                matched_pattern.string
-            )  # default to the user input, if unable to map based on wildcards.
+            return matched_pattern.string  # default to the user input, if unable to map based on wildcards.
         # Replace the corresponding wildcards in the litellm model pattern with extracted segments
         for segment in dynamic_segments:
-            litellm_deployment_litellm_model = litellm_deployment_litellm_model.replace(
-                "*", segment, 1
-            )
+            litellm_deployment_litellm_model = litellm_deployment_litellm_model.replace("*", segment, 1)
 
         return litellm_deployment_litellm_model
 
-    def get_pattern(
-        self, model: str, custom_llm_provider: Optional[str] = None
-    ) -> Optional[List[Dict]]:
+    def get_pattern(self, model: str, custom_llm_provider: Optional[str] = None) -> Optional[List[Dict]]:
         """
         Check if a pattern exists for the given model and custom llm provider
 
@@ -236,9 +239,7 @@ class PatternMatchRouter:
                 pass
         return self.route(model) or self.route(f"{custom_llm_provider}/{model}")
 
-    def get_deployments_by_pattern(
-        self, model: str, custom_llm_provider: Optional[str] = None
-    ) -> List[Dict]:
+    def get_deployments_by_pattern(self, model: str, custom_llm_provider: Optional[str] = None) -> List[Dict]:
         """
         Get the deployments by pattern
 
@@ -253,6 +254,23 @@ class PatternMatchRouter:
         if pattern_match:
             return pattern_match
         return []
+
+    def _compile_all_patterns(self):
+        """
+        Compile all patterns to regex and cache (pattern, regex_obj, deployments)
+        """
+        # Ensure thread safety for pattern table update
+        with self._pattern_lock:
+            sorted_items = PatternUtils.sorted_patterns(self.patterns)
+            self._compiled_patterns = [
+                (pattern, re.compile(pattern), deployments) for pattern, deployments in sorted_items
+            ]
+            self._compiled_filtered_regex_cache = {}
+
+    def _ensure_compiled_patterns(self):
+        # If patterns changed or not yet compiled, refresh
+        if self._compiled_patterns is None or len(self._compiled_patterns) != len(self.patterns):
+            self._compile_all_patterns()
 
 
 # Example usage:
