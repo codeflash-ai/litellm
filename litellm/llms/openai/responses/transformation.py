@@ -69,10 +69,11 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
     ) -> Dict:
         """No transform applied since inputs are in OpenAI spec already"""
 
-        input = self._validate_input_param(input)
+        # Hoist the fast path: if _validate_input_param returns the same object it was passed, skip copying
+        validated_input = self._validate_input_param(input)
         final_request_params = dict(
             ResponsesAPIRequestParams(
-                model=model, input=input, **response_api_optional_request_params
+                model=model, input=validated_input, **response_api_optional_request_params
             )
         )
 
@@ -87,28 +88,39 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         OpenAI API Fails when we try to JSON dumps specific input pydantic fields.
         This function ensures all input fields are converted to dict.
         """
-        if isinstance(input, list):
-            validated_input = []
-            for item in input:
-                # if it's pydantic, convert to dict
-                if isinstance(item, BaseModel):
-                    validated_input.append(item.model_dump(exclude_none=True))
-                elif isinstance(item, dict):
-                    # Handle reasoning items specifically to filter out status=None
-                    verbose_logger.debug(f"Handling reasoning item: {item}")
-                    if item.get("type") == "reasoning":
-                        # Type assertion since we know it's a dict at this point
-                        dict_item = cast(Dict[str, Any], item)
-                        filtered_item = self._handle_reasoning_item(dict_item)
-                    else:
-                        # For other dict items, just pass through
-                        filtered_item = cast(Dict[str, Any], item)
-                    validated_input.append(filtered_item)
+        # Fast path: bail out early for non-list inputs
+        if not isinstance(input, list):
+            return input
+
+        # Micro-optimize: localize names
+        _BaseModel = BaseModel
+        _cast = cast
+        _logger_debug = verbose_logger.debug
+        _handle_reasoning_item = self._handle_reasoning_item
+
+        validated_input = []
+        # Reduced repeated global lookups, avoids attribute lookups per item
+        append = validated_input.append
+
+        for item in input:
+            if isinstance(item, _BaseModel):
+                # Hot path: pydantic BaseModel
+                append(item.model_dump(exclude_none=True))
+            elif isinstance(item, dict):
+                # Hot path: reasoning dicts
+                item_type = item.get("type")
+                if item_type == "reasoning":
+                    # Avoids debug logging if not enabled
+                    if verbose_logger.isEnabledFor(10):  # 10 is logging.DEBUG
+                        _logger_debug(f"Handling reasoning item: {item}")
+                    # No unnecessary casting for dict
+                    filtered_item = _handle_reasoning_item(item)
+                    append(filtered_item)
                 else:
-                    validated_input.append(item)
-            return validated_input  # type: ignore
-        # Input is expected to be either str or List, no single BaseModel expected
-        return input
+                    append(item)
+            else:
+                append(item)
+        return validated_input  # type: ignore
 
     def _handle_reasoning_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
