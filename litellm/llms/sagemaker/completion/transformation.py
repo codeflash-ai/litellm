@@ -51,21 +51,18 @@ class SagemakerConfig(BaseConfig):
         temperature: Optional[float] = None,
         return_full_text: Optional[bool] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
+        # Avoid unnecessary .copy() of locals(), process in-place for small N
+        for key in ("max_new_tokens", "max_completion_tokens", "top_p", "temperature", "return_full_text"):
+            value = locals()[key]
+            if value is not None:
                 setattr(self.__class__, key, value)
 
     @classmethod
     def get_config(cls):
         return super().get_config()
 
-    def get_error_class(
-        self, error_message: str, status_code: int, headers: Union[dict, Headers]
-    ) -> BaseLLMException:
-        return SagemakerError(
-            message=error_message, status_code=status_code, headers=headers
-        )
+    def get_error_class(self, error_message: str, status_code: int, headers: Union[dict, Headers]) -> BaseLLMException:
+        return SagemakerError(message=error_message, status_code=status_code, headers=headers)
 
     def get_supported_openai_params(self, model: str) -> List:
         return ["stream", "temperature", "max_tokens", "max_completion_tokens", "top_p", "stop", "n"]
@@ -82,9 +79,7 @@ class SagemakerConfig(BaseConfig):
                 if value == 0.0 or value == 0:
                     # hugging face exception raised when temp==0
                     # Failed: Error occurred: HuggingfaceException - Input validation error: `temperature` must be strictly positive
-                    if not non_default_params.get(
-                        "aws_sagemaker_allow_zero_temp", False
-                    ):
+                    if not non_default_params.get("aws_sagemaker_allow_zero_temp", False):
                         value = 0.01
 
                 optional_params["temperature"] = value
@@ -92,9 +87,7 @@ class SagemakerConfig(BaseConfig):
                 optional_params["top_p"] = value
             if param == "n":
                 optional_params["best_of"] = value
-                optional_params[
-                    "do_sample"
-                ] = True  # Need to sample if you want best of for hf inference endpoints
+                optional_params["do_sample"] = True  # Need to sample if you want best of for hf inference endpoints
             if param == "stream":
                 optional_params["stream"] = value
             if param == "stop":
@@ -117,41 +110,47 @@ class SagemakerConfig(BaseConfig):
         custom_prompt_dict: dict,
         hf_model_name: Optional[str],
     ) -> str:
-        if model in custom_prompt_dict:
-            # check if the model has a registered custom prompt
-            model_prompt_details = custom_prompt_dict[model]
-            prompt = custom_prompt(
-                role_dict=model_prompt_details.get("roles", None),
-                initial_prompt_value=model_prompt_details.get(
-                    "initial_prompt_value", ""
-                ),
-                final_prompt_value=model_prompt_details.get("final_prompt_value", ""),
-                messages=messages,
-            )
-        elif hf_model_name in custom_prompt_dict:
-            # check if the base huggingface model has a registered custom prompt
-            model_prompt_details = custom_prompt_dict[hf_model_name]
-            prompt = custom_prompt(
-                role_dict=model_prompt_details.get("roles", None),
-                initial_prompt_value=model_prompt_details.get(
-                    "initial_prompt_value", ""
-                ),
-                final_prompt_value=model_prompt_details.get("final_prompt_value", ""),
-                messages=messages,
-            )
-        else:
-            if hf_model_name is None:
-                if "llama-2" in model.lower():  # llama-2 model
-                    if "chat" in model.lower():  # apply llama2 chat template
-                        hf_model_name = "meta-llama/Llama-2-7b-chat-hf"
-                    else:  # apply regular llama2 template
-                        hf_model_name = "meta-llama/Llama-2-7b"
-            hf_model_name = (
-                hf_model_name or model
-            )  # pass in hf model name for pulling it's prompt template - (e.g. `hf_model_name="meta-llama/Llama-2-7b-chat-hf` applies the llama2 chat template to the prompt)
-            prompt: str = prompt_factory(model=hf_model_name, messages=messages)  # type: ignore
+        # Minimize model.lower() calls and dict lookups, and avoid duplicate prompt computation path logic
+        model_val = model
+        hf_name = hf_model_name
 
-        return prompt
+        custom_prompt_dict_get = custom_prompt_dict.get
+
+        model_prompt_details = custom_prompt_dict_get(model_val)
+        if model_prompt_details is not None:
+            prompt = custom_prompt(
+                role_dict=model_prompt_details.get("roles", None),
+                initial_prompt_value=model_prompt_details.get("initial_prompt_value", ""),
+                final_prompt_value=model_prompt_details.get("final_prompt_value", ""),
+                messages=messages,
+            )
+            return prompt
+
+        model_prompt_details = None
+        if hf_name is not None:
+            model_prompt_details = custom_prompt_dict_get(hf_name)
+        if model_prompt_details is not None:
+            prompt = custom_prompt(
+                role_dict=model_prompt_details.get("roles", None),
+                initial_prompt_value=model_prompt_details.get("initial_prompt_value", ""),
+                final_prompt_value=model_prompt_details.get("final_prompt_value", ""),
+                messages=messages,
+            )
+            return prompt
+
+        if hf_name is None:
+            model_lower = model_val.lower()
+            if "llama-2" in model_lower:
+                if "chat" in model_lower:
+                    hf_name = "meta-llama/Llama-2-7b-chat-hf"
+                else:
+                    hf_name = "meta-llama/Llama-2-7b"
+
+        # hf_name might still be None - use model_val if so
+        use_model = hf_name if hf_name is not None else model_val
+
+        # prompt_factory is the core bottleneck; nothing to optimize further here
+        return prompt_factory(model=use_model, messages=messages)  # type: ignore
 
     def transform_request(
         self,
@@ -164,14 +163,11 @@ class SagemakerConfig(BaseConfig):
         inference_params = optional_params.copy()
         stream = inference_params.pop("stream", False)
         data: Dict = {"parameters": inference_params}
-        if stream is True:
+        if stream:
             data["stream"] = True
 
-        custom_prompt_dict = (
-            litellm_params.get("custom_prompt_dict", None) or litellm.custom_prompt_dict
-        )
-
-        hf_model_name = litellm_params.get("hf_model_name", None)
+        custom_prompt_dict = litellm_params.get("custom_prompt_dict") or litellm.custom_prompt_dict
+        hf_model_name = litellm_params.get("hf_model_name")
 
         prompt = self._transform_prompt(
             model=model,
@@ -191,9 +187,7 @@ class SagemakerConfig(BaseConfig):
         litellm_params: dict,
         headers: dict,
     ) -> dict:
-        return await asyncify(self.transform_request)(
-            model, messages, optional_params, litellm_params, headers
-        )
+        return await asyncify(self.transform_request)(model, messages, optional_params, litellm_params, headers)
 
     def transform_response(
         self,
@@ -278,5 +272,3 @@ class SagemakerConfig(BaseConfig):
             headers = {"Content-Type": "application/json", **headers}
 
         return headers
-
-
