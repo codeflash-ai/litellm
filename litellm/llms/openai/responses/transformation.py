@@ -18,6 +18,41 @@ from litellm.types.utils import LlmProviders
 
 from ..common_utils import OpenAIError
 
+_EVENT_MODELS = {
+    ResponsesAPIStreamEvents.RESPONSE_CREATED: ResponseCreatedEvent,
+    ResponsesAPIStreamEvents.RESPONSE_IN_PROGRESS: ResponseInProgressEvent,
+    ResponsesAPIStreamEvents.RESPONSE_COMPLETED: ResponseCompletedEvent,
+    ResponsesAPIStreamEvents.RESPONSE_FAILED: ResponseFailedEvent,
+    ResponsesAPIStreamEvents.RESPONSE_INCOMPLETE: ResponseIncompleteEvent,
+    ResponsesAPIStreamEvents.OUTPUT_ITEM_ADDED: OutputItemAddedEvent,
+    ResponsesAPIStreamEvents.OUTPUT_ITEM_DONE: OutputItemDoneEvent,
+    ResponsesAPIStreamEvents.CONTENT_PART_ADDED: ContentPartAddedEvent,
+    ResponsesAPIStreamEvents.CONTENT_PART_DONE: ContentPartDoneEvent,
+    ResponsesAPIStreamEvents.OUTPUT_TEXT_DELTA: OutputTextDeltaEvent,
+    ResponsesAPIStreamEvents.OUTPUT_TEXT_ANNOTATION_ADDED: OutputTextAnnotationAddedEvent,
+    ResponsesAPIStreamEvents.OUTPUT_TEXT_DONE: OutputTextDoneEvent,
+    ResponsesAPIStreamEvents.REFUSAL_DELTA: RefusalDeltaEvent,
+    ResponsesAPIStreamEvents.REFUSAL_DONE: RefusalDoneEvent,
+    ResponsesAPIStreamEvents.FUNCTION_CALL_ARGUMENTS_DELTA: FunctionCallArgumentsDeltaEvent,
+    ResponsesAPIStreamEvents.FUNCTION_CALL_ARGUMENTS_DONE: FunctionCallArgumentsDoneEvent,
+    ResponsesAPIStreamEvents.FILE_SEARCH_CALL_IN_PROGRESS: FileSearchCallInProgressEvent,
+    ResponsesAPIStreamEvents.FILE_SEARCH_CALL_SEARCHING: FileSearchCallSearchingEvent,
+    ResponsesAPIStreamEvents.FILE_SEARCH_CALL_COMPLETED: FileSearchCallCompletedEvent,
+    ResponsesAPIStreamEvents.WEB_SEARCH_CALL_IN_PROGRESS: WebSearchCallInProgressEvent,
+    ResponsesAPIStreamEvents.WEB_SEARCH_CALL_SEARCHING: WebSearchCallSearchingEvent,
+    ResponsesAPIStreamEvents.WEB_SEARCH_CALL_COMPLETED: WebSearchCallCompletedEvent,
+    ResponsesAPIStreamEvents.MCP_LIST_TOOLS_IN_PROGRESS: MCPListToolsInProgressEvent,
+    ResponsesAPIStreamEvents.MCP_LIST_TOOLS_COMPLETED: MCPListToolsCompletedEvent,
+    ResponsesAPIStreamEvents.MCP_LIST_TOOLS_FAILED: MCPListToolsFailedEvent,
+    ResponsesAPIStreamEvents.MCP_CALL_IN_PROGRESS: MCPCallInProgressEvent,
+    ResponsesAPIStreamEvents.MCP_CALL_ARGUMENTS_DELTA: MCPCallArgumentsDeltaEvent,
+    ResponsesAPIStreamEvents.MCP_CALL_ARGUMENTS_DONE: MCPCallArgumentsDoneEvent,
+    ResponsesAPIStreamEvents.MCP_CALL_COMPLETED: MCPCallCompletedEvent,
+    ResponsesAPIStreamEvents.MCP_CALL_FAILED: MCPCallFailedEvent,
+    ResponsesAPIStreamEvents.IMAGE_GENERATION_PARTIAL_IMAGE: ImageGenerationPartialImageEvent,
+    ResponsesAPIStreamEvents.ERROR: ErrorEvent,
+}
+
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as _LiteLLMLoggingObj
 
@@ -231,9 +266,7 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         # Convert the dictionary to a properly typed ResponsesAPIStreamingResponse
         verbose_logger.debug("Raw OpenAI Chunk=%s", parsed_chunk)
         event_type = str(parsed_chunk.get("type"))
-        event_pydantic_model = OpenAIResponsesAPIConfig.get_event_model_class(
-            event_type=event_type
-        )
+        event_pydantic_model = self.get_event_model_class(event_type)
         return event_pydantic_model(**parsed_chunk)
 
     @staticmethod
@@ -250,42 +283,8 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         Raises:
             ValueError: If the event type is unknown
         """
-        event_models = {
-            ResponsesAPIStreamEvents.RESPONSE_CREATED: ResponseCreatedEvent,
-            ResponsesAPIStreamEvents.RESPONSE_IN_PROGRESS: ResponseInProgressEvent,
-            ResponsesAPIStreamEvents.RESPONSE_COMPLETED: ResponseCompletedEvent,
-            ResponsesAPIStreamEvents.RESPONSE_FAILED: ResponseFailedEvent,
-            ResponsesAPIStreamEvents.RESPONSE_INCOMPLETE: ResponseIncompleteEvent,
-            ResponsesAPIStreamEvents.OUTPUT_ITEM_ADDED: OutputItemAddedEvent,
-            ResponsesAPIStreamEvents.OUTPUT_ITEM_DONE: OutputItemDoneEvent,
-            ResponsesAPIStreamEvents.CONTENT_PART_ADDED: ContentPartAddedEvent,
-            ResponsesAPIStreamEvents.CONTENT_PART_DONE: ContentPartDoneEvent,
-            ResponsesAPIStreamEvents.OUTPUT_TEXT_DELTA: OutputTextDeltaEvent,
-            ResponsesAPIStreamEvents.OUTPUT_TEXT_ANNOTATION_ADDED: OutputTextAnnotationAddedEvent,
-            ResponsesAPIStreamEvents.OUTPUT_TEXT_DONE: OutputTextDoneEvent,
-            ResponsesAPIStreamEvents.REFUSAL_DELTA: RefusalDeltaEvent,
-            ResponsesAPIStreamEvents.REFUSAL_DONE: RefusalDoneEvent,
-            ResponsesAPIStreamEvents.FUNCTION_CALL_ARGUMENTS_DELTA: FunctionCallArgumentsDeltaEvent,
-            ResponsesAPIStreamEvents.FUNCTION_CALL_ARGUMENTS_DONE: FunctionCallArgumentsDoneEvent,
-            ResponsesAPIStreamEvents.FILE_SEARCH_CALL_IN_PROGRESS: FileSearchCallInProgressEvent,
-            ResponsesAPIStreamEvents.FILE_SEARCH_CALL_SEARCHING: FileSearchCallSearchingEvent,
-            ResponsesAPIStreamEvents.FILE_SEARCH_CALL_COMPLETED: FileSearchCallCompletedEvent,
-            ResponsesAPIStreamEvents.WEB_SEARCH_CALL_IN_PROGRESS: WebSearchCallInProgressEvent,
-            ResponsesAPIStreamEvents.WEB_SEARCH_CALL_SEARCHING: WebSearchCallSearchingEvent,
-            ResponsesAPIStreamEvents.WEB_SEARCH_CALL_COMPLETED: WebSearchCallCompletedEvent,
-            ResponsesAPIStreamEvents.MCP_LIST_TOOLS_IN_PROGRESS: MCPListToolsInProgressEvent,
-            ResponsesAPIStreamEvents.MCP_LIST_TOOLS_COMPLETED: MCPListToolsCompletedEvent,
-            ResponsesAPIStreamEvents.MCP_LIST_TOOLS_FAILED: MCPListToolsFailedEvent,
-            ResponsesAPIStreamEvents.MCP_CALL_IN_PROGRESS: MCPCallInProgressEvent,
-            ResponsesAPIStreamEvents.MCP_CALL_ARGUMENTS_DELTA: MCPCallArgumentsDeltaEvent,
-            ResponsesAPIStreamEvents.MCP_CALL_ARGUMENTS_DONE: MCPCallArgumentsDoneEvent,
-            ResponsesAPIStreamEvents.MCP_CALL_COMPLETED: MCPCallCompletedEvent,
-            ResponsesAPIStreamEvents.MCP_CALL_FAILED: MCPCallFailedEvent,
-            ResponsesAPIStreamEvents.IMAGE_GENERATION_PARTIAL_IMAGE: ImageGenerationPartialImageEvent,
-            ResponsesAPIStreamEvents.ERROR: ErrorEvent,
-        }
-
-        model_class = event_models.get(cast(ResponsesAPIStreamEvents, event_type))
+        # Use static precomputed event_models mapping, and avoid recreation
+        model_class = _EVENT_MODELS.get(cast(ResponsesAPIStreamEvents, event_type))
         if not model_class:
             return GenericEvent
 
