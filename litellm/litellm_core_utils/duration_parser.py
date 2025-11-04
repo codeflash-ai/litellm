@@ -11,6 +11,15 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+_timezone_map = {
+    "US/Eastern": timezone(timedelta(hours=-4)),      # EDT
+    "US/Pacific": timezone(timedelta(hours=-7)),      # PDT
+    "Asia/Kolkata": timezone(timedelta(hours=5, minutes=30)),  # IST
+    "Asia/Bangkok": timezone(timedelta(hours=7)),     # ICT (Indochina Time)
+    "Europe/London": timezone(timedelta(hours=1)),    # BST
+    "UTC": timezone.utc,
+}
+
 
 def _extract_from_regex(duration: str) -> Tuple[int, str]:
     match = re.match(r"(\d+)(mo|[smhdw]?)", duration)
@@ -149,29 +158,18 @@ def _setup_timezone(
     current_time: datetime, timezone_str: str = "UTC"
 ) -> Tuple[datetime, timezone]:
     """Set up timezone and normalize current time to that timezone."""
-    try:
-        if timezone_str is None:
-            tz = timezone.utc
-        else:
-            # Map common timezone strings to their UTC offsets
-            timezone_map = {
-                "US/Eastern": timezone(timedelta(hours=-4)),  # EDT
-                "US/Pacific": timezone(timedelta(hours=-7)),  # PDT
-                "Asia/Kolkata": timezone(timedelta(hours=5, minutes=30)),  # IST
-                "Asia/Bangkok": timezone(timedelta(hours=7)),  # ICT (Indochina Time)
-                "Europe/London": timezone(timedelta(hours=1)),  # BST
-                "UTC": timezone.utc,
-            }
-            tz = timezone_map.get(timezone_str, timezone.utc)
-    except Exception:
-        # If timezone is invalid, fall back to UTC
+    # Avoid try/except for normal case, only fallback to UTC if needed
+    if timezone_str is None:
         tz = timezone.utc
+    else:
+        tz = _timezone_map.get(timezone_str)
+        if tz is None:
+            tz = timezone.utc
 
     # Convert current_time to the target timezone
     if current_time.tzinfo is None:
         # Naive datetime - assume it's UTC
-        utc_time = current_time.replace(tzinfo=timezone.utc)
-        current_time = utc_time.astimezone(tz)
+        current_time = current_time.replace(tzinfo=timezone.utc).astimezone(tz)
     else:
         # Already has timezone - convert to target timezone
         current_time = current_time.astimezone(tz)
