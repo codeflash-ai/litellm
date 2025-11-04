@@ -10,6 +10,7 @@ from litellm.types.llms.openai import *
 from litellm.types.responses.main import *
 from litellm.types.router import GenericLiteLLMParams
 from litellm.types.utils import LlmProviders
+from urllib.parse import urlparse, urlunparse
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as _LiteLLMLoggingObj
@@ -286,14 +287,15 @@ class AzureOpenAIResponsesAPIConfig(OpenAIResponsesAPIConfig):
         This function handles URLs with query parameters by inserting the response_id
         at the correct location (before any query parameters).
         """
-        from urllib.parse import urlparse, urlunparse
 
         # Parse the URL to separate its components
         parsed_url = urlparse(api_base)
 
         # Insert the response_id and /cancel at the end of the path component
         # Remove trailing slash if present to avoid double slashes
-        path = parsed_url.path.rstrip("/")
+        path = parsed_url.path
+        if path.endswith('/'):
+            path = path[:-1]
         new_path = f"{path}/{response_id}/cancel"
 
         # Reconstruct the URL with all original components but with the modified path
