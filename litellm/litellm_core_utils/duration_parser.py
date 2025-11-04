@@ -11,6 +11,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+_duration_regex = re.compile(r"(\d+)([a-z]+)")
+
 
 def _extract_from_regex(duration: str) -> Tuple[int, str]:
     match = re.match(r"(\d+)(mo|[smhdw]?)", duration)
@@ -181,7 +183,7 @@ def _setup_timezone(
 
 def _parse_duration(duration: str) -> Tuple[Optional[int], Optional[str]]:
     """Parse the duration string into value and unit."""
-    match = re.match(r"(\d+)([a-z]+)", duration)
+    match = _duration_regex.match(duration)
     if not match:
         return None, None
 
