@@ -10,6 +10,7 @@ from litellm.types.llms.openai import *
 from litellm.types.responses.main import *
 from litellm.types.router import GenericLiteLLMParams
 from litellm.types.utils import LlmProviders
+from urllib.parse import urlparse, urlunparse
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as _LiteLLMLoggingObj
@@ -165,7 +166,6 @@ class AzureOpenAIResponsesAPIConfig(OpenAIResponsesAPIConfig):
         """
         Constructs a URL for the API request with the response_id in the path.
         """
-        from urllib.parse import urlparse, urlunparse
 
         # Parse the URL to separate its components
         parsed_url = urlparse(api_base)
@@ -173,19 +173,18 @@ class AzureOpenAIResponsesAPIConfig(OpenAIResponsesAPIConfig):
         # Insert the response_id at the end of the path component
         # Remove trailing slash if present to avoid double slashes
         path = parsed_url.path.rstrip("/")
-        new_path = f"{path}/{response_id}"
+        # Use faster string concatenation instead of f-string
+        new_path = path + '/' + response_id
 
         # Reconstruct the URL with all original components but with the modified path
-        constructed_url = urlunparse(
-            (
-                parsed_url.scheme,  # http, https
-                parsed_url.netloc,  # domain name, port
-                new_path,  # path with response_id added
-                parsed_url.params,  # parameters
-                parsed_url.query,  # query string
-                parsed_url.fragment,  # fragment
-            )
-        )
+        constructed_url = urlunparse((
+            parsed_url.scheme,      # http, https
+            parsed_url.netloc,      # domain name, port
+            new_path,               # path with response_id added
+            parsed_url.params,      # parameters
+            parsed_url.query,       # query string
+            parsed_url.fragment,    # fragment
+        ))
         return constructed_url
 
     def transform_delete_response_api_request(
