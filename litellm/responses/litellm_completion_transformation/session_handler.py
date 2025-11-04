@@ -293,10 +293,19 @@ class ResponsesSessionHandler:
 
         spend_logs = await prisma_client.db.query_raw(query, previous_response_id)
 
-        verbose_proxy_logger.debug(
-            "Found the following spend logs for previous response id %s: %s",
-            previous_response_id,
-            json.dumps(spend_logs, indent=4, default=str),
-        )
+        if verbose_proxy_logger.isEnabledFor(10):
+            # Perform serialization only if debug logging is enabled
+            logs_str = json.dumps(spend_logs, indent=4, default=str)
+            verbose_proxy_logger.debug(
+                "Found the following spend logs for previous response id %s: %s",
+                previous_response_id,
+                logs_str,
+            )
+        else:
+            verbose_proxy_logger.debug(
+                "Found the following spend logs for previous response id %s.",
+                previous_response_id,
+            )
+
 
         return spend_logs
