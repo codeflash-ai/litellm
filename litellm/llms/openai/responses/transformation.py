@@ -17,6 +17,7 @@ from litellm.types.router import GenericLiteLLMParams
 from litellm.types.utils import LlmProviders
 
 from ..common_utils import OpenAIError
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from litellm.litellm_core_utils.litellm_logging import Logging as _LiteLLMLoggingObj
@@ -209,8 +210,8 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         api_base = (
             api_base
             or litellm.api_base
-            or get_secret_str("OPENAI_BASE_URL")
-            or get_secret_str("OPENAI_API_BASE")
+            or _cached_get_secret_str("OPENAI_BASE_URL")
+            or _cached_get_secret_str("OPENAI_API_BASE")
             or "https://api.openai.com/v1"
         )
 
@@ -463,3 +464,7 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
                 message=raw_response.text, status_code=raw_response.status_code
             )
         return ResponsesAPIResponse(**raw_response_json)
+
+@lru_cache(maxsize=4)
+def _cached_get_secret_str(secret_name: str) -> Optional[str]:
+    return get_secret_str(secret_name)
