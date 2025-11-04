@@ -244,23 +244,13 @@ def _handle_hour_reset(
         return current_time
 
     current_hour = current_time.hour
-    current_minute = current_time.minute
-    current_second = current_time.second
-    current_microsecond = current_time.microsecond
 
     # Calculate next hour aligned with the value
-    if current_minute == 0 and current_second == 0 and current_microsecond == 0:
-        next_hour = (
-            current_hour + value - (current_hour % value)
-            if current_hour % value != 0
-            else current_hour + value
-        )
-    else:
-        next_hour = (
-            current_hour + value - (current_hour % value)
-            if current_hour % value != 0
-            else current_hour + value
-        )
+    next_hour = (
+        current_hour + value - (current_hour % value)
+        if current_hour % value != 0
+        else current_hour + value
+    )
 
     # Handle overnight case
     if next_hour >= 24:
