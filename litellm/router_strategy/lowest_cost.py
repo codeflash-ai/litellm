@@ -15,9 +15,7 @@ class LowestCostLoggingHandler(CustomLogger):
     logged_success: int = 0
     logged_failure: int = 0
 
-    def __init__(
-        self, router_cache: DualCache, routing_args: dict = {}
-    ):
+    def __init__(self, router_cache: DualCache, routing_args: dict = {}):
         self.router_cache = router_cache
 
     def log_success_event(self, kwargs, response_obj, start_time, end_time):
@@ -28,9 +26,7 @@ class LowestCostLoggingHandler(CustomLogger):
             if kwargs["litellm_params"].get("metadata") is None:
                 pass
             else:
-                model_group = kwargs["litellm_params"]["metadata"].get(
-                    "model_group", None
-                )
+                model_group = kwargs["litellm_params"]["metadata"].get("model_group", None)
 
                 id = kwargs["litellm_params"].get("model_info", {}).get("id", None)
                 if model_group is None or id is None:
@@ -87,9 +83,7 @@ class LowestCostLoggingHandler(CustomLogger):
                 )
 
                 ## RPM
-                request_count_dict[id][precise_minute]["rpm"] = (
-                    request_count_dict[id][precise_minute].get("rpm", 0) + 1
-                )
+                request_count_dict[id][precise_minute]["rpm"] = request_count_dict[id][precise_minute].get("rpm", 0) + 1
 
                 self.router_cache.set_cache(key=cost_key, value=request_count_dict)
 
@@ -98,9 +92,7 @@ class LowestCostLoggingHandler(CustomLogger):
                     self.logged_success += 1
         except Exception as e:
             verbose_logger.exception(
-                "litellm.router_strategy.lowest_cost.py::log_success_event(): Exception occured - {}".format(
-                    str(e)
-                )
+                "litellm.router_strategy.lowest_cost.py::log_success_event(): Exception occured - {}".format(str(e))
             )
             pass
 
@@ -109,38 +101,27 @@ class LowestCostLoggingHandler(CustomLogger):
             """
             Update cost usage on success
             """
-            if kwargs["litellm_params"].get("metadata") is None:
+            litellm_params = kwargs["litellm_params"]
+            metadata = litellm_params.get("metadata")
+            if metadata is None:
                 pass
             else:
-                model_group = kwargs["litellm_params"]["metadata"].get(
-                    "model_group", None
-                )
+                model_group = metadata.get("model_group", None)
+                id = litellm_params.get("model_info", {}).get("id", None)
 
-                id = kwargs["litellm_params"].get("model_info", {}).get("id", None)
                 if model_group is None or id is None:
                     return
                 elif isinstance(id, int):
                     id = str(id)
 
-                # ------------
-                # Setup values
-                # ------------
-                """
-                {
-                    {model_group}_map: {
-                        id: {
-                            "cost": [..]
-                            f"{date:hour:minute}" : {"tpm": 34, "rpm": 3}
-                        }
-                    }
-                }
-                """
-                cost_key = f"{model_group}_map"
-
-                current_date = datetime.now().strftime("%Y-%m-%d")
-                current_hour = datetime.now().strftime("%H")
-                current_minute = datetime.now().strftime("%M")
+                # Single datetime call for efficiency
+                now = datetime.now()
+                current_date = now.strftime("%Y-%m-%d")
+                current_hour = now.strftime("%H")
+                current_minute = now.strftime("%M")
                 precise_minute = f"{current_date}-{current_hour}-{current_minute}"
+
+                cost_key = f"{model_group}_map"
 
                 response_ms: timedelta = end_time - start_time
 
@@ -152,30 +133,17 @@ class LowestCostLoggingHandler(CustomLogger):
                         completion_tokens = _usage.completion_tokens
                         total_tokens = _usage.total_tokens
 
-                        float(response_ms.total_seconds() / completion_tokens)
-
                 # ------------
                 # Update usage
                 # ------------
 
-                request_count_dict = (
-                    await self.router_cache.async_get_cache(key=cost_key) or {}
-                )
+                request_count_dict = await self.router_cache.async_get_cache(key=cost_key) or {}
 
-                if id not in request_count_dict:
-                    request_count_dict[id] = {}
-                if precise_minute not in request_count_dict[id]:
-                    request_count_dict[id][precise_minute] = {}
-
-                ## TPM
-                request_count_dict[id][precise_minute]["tpm"] = (
-                    request_count_dict[id][precise_minute].get("tpm", 0) + total_tokens
-                )
-
-                ## RPM
-                request_count_dict[id][precise_minute]["rpm"] = (
-                    request_count_dict[id][precise_minute].get("rpm", 0) + 1
-                )
+                # Efficient nested dict mutation with local references
+                id_dict = request_count_dict.setdefault(id, {})
+                minute_dict = id_dict.setdefault(precise_minute, {})
+                minute_dict["tpm"] = minute_dict.get("tpm", 0) + total_tokens
+                minute_dict["rpm"] = minute_dict.get("rpm", 0) + 1
 
                 await self.router_cache.async_set_cache(
                     key=cost_key, value=request_count_dict
@@ -263,32 +231,22 @@ class LowestCostLoggingHandler(CustomLogger):
                 or float("inf")
             )
             item_litellm_model_name = _deployment.get("litellm_params", {}).get("model")
-            item_litellm_model_cost_map = litellm.model_cost.get(
-                item_litellm_model_name, {}
-            )
+            item_litellm_model_cost_map = litellm.model_cost.get(item_litellm_model_name, {})
 
             # check if user provided input_cost_per_token and output_cost_per_token in litellm_params
             item_input_cost = None
             item_output_cost = None
             if _deployment.get("litellm_params", {}).get("input_cost_per_token", None):
-                item_input_cost = _deployment.get("litellm_params", {}).get(
-                    "input_cost_per_token"
-                )
+                item_input_cost = _deployment.get("litellm_params", {}).get("input_cost_per_token")
 
             if _deployment.get("litellm_params", {}).get("output_cost_per_token", None):
-                item_output_cost = _deployment.get("litellm_params", {}).get(
-                    "output_cost_per_token"
-                )
+                item_output_cost = _deployment.get("litellm_params", {}).get("output_cost_per_token")
 
             if item_input_cost is None:
-                item_input_cost = item_litellm_model_cost_map.get(
-                    "input_cost_per_token", 5.0
-                )
+                item_input_cost = item_litellm_model_cost_map.get("input_cost_per_token", 5.0)
 
             if item_output_cost is None:
-                item_output_cost = item_litellm_model_cost_map.get(
-                    "output_cost_per_token", 5.0
-                )
+                item_output_cost = item_litellm_model_cost_map.get("output_cost_per_token", 5.0)
 
             # if litellm["model"] is not in model_cost map -> use item_cost = $10
 
@@ -306,9 +264,7 @@ class LowestCostLoggingHandler(CustomLogger):
             # -------------- #
             # We use _cost_per_deployment to log to langfuse, slack - this is not used to make a decision on routing
             # this helps a user to debug why the router picked a specfic deployment      #
-            _deployment_api_base = _deployment.get("litellm_params", {}).get(
-                "api_base", ""
-            )
+            _deployment_api_base = _deployment.get("litellm_params", {}).get("api_base", "")
             if _deployment_api_base is not None:
                 _cost_per_deployment[_deployment_api_base] = item_cost
             # -------------- #
@@ -316,8 +272,7 @@ class LowestCostLoggingHandler(CustomLogger):
             # -------------- #
 
             if (
-                item_tpm + input_tokens > _deployment_tpm
-                or item_rpm + 1 > _deployment_rpm
+                item_tpm + input_tokens > _deployment_tpm or item_rpm + 1 > _deployment_rpm
             ):  # if user passed in tpm / rpm in the model_list
                 continue
             else:
