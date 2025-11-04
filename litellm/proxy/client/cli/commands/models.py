@@ -316,7 +316,6 @@ def update_model(ctx: click.Context, model_id: str, param: tuple[str, ...], info
 def _filter_model(model, model_regex, access_group_regex):
     model_name = model.get("model_name")
     model_params = model.get("litellm_params")
-    model_info = model.get("model_info", {})
     if not model_name or not model_params:
         return False
     model_id = model_params.get("model")
@@ -324,12 +323,18 @@ def _filter_model(model, model_regex, access_group_regex):
         return False
     if model_regex and not model_regex.search(model_id):
         return False
-    access_groups = model_info.get("access_groups", [])
     if access_group_regex:
+        model_info = model.get("model_info", {})
+        access_groups = model_info.get("access_groups")
+        # Instead of always making an empty list, cheap `None` check
         if not isinstance(access_groups, list):
             return False
-        if not any(isinstance(group, str) and access_group_regex.search(group) for group in access_groups):
-            return False
+        # Avoids calling search repeatedly on non-str
+        for group in access_groups:
+            if isinstance(group, str) and access_group_regex.search(group):
+                return True
+        return False
+
     return True
 
 
@@ -375,6 +380,19 @@ def _get_filtered_model_list(model_list, only_models_matching_regex, only_access
     """Return a list of models that pass the filter criteria."""
     model_regex = re.compile(only_models_matching_regex) if only_models_matching_regex else None
     access_group_regex = re.compile(only_access_groups_matching_regex) if only_access_groups_matching_regex else None
+
+    # Avoid creating the inner function frame by manually inlining the logic for the tight loop
+    if not model_regex and not access_group_regex:
+        # If no filters, all valid models (fast path)
+        return [
+            model
+            for model in model_list
+            if model.get("model_name")
+            and (params := model.get("litellm_params"))
+            and (model_id := params.get("model"))
+            and isinstance(model_id, str)
+        ]
+
     return [model for model in model_list if _filter_model(model, model_regex, access_group_regex)]
 
 
