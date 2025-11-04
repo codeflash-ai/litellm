@@ -47,6 +47,7 @@ from litellm.types.utils import (
     TokenCountResponse,
 )
 from litellm.utils import load_credentials_from_list
+from litellm.proxy._types import Any, Dict, Optional
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -1831,10 +1832,6 @@ class ProxyConfig:
                 prisma_client=prisma_client,
                 store_model_in_db=store_model_in_db,
             )
-
-        ## PRINT YAML FOR CONFIRMING IT WORKS
-        printed_yaml = copy.deepcopy(config)
-        printed_yaml.pop("environment_variables", None)
 
         config = self._check_for_os_environ_vars(config=config)
 
