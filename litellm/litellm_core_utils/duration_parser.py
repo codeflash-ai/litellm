@@ -281,22 +281,10 @@ def _handle_minute_reset(
 
     current_hour = current_time.hour
     current_minute = current_time.minute
-    current_second = current_time.second
-    current_microsecond = current_time.microsecond
 
     # Calculate next minute aligned with the value
-    if current_second == 0 and current_microsecond == 0:
-        next_minute = (
-            current_minute + value - (current_minute % value)
-            if current_minute % value != 0
-            else current_minute + value
-        )
-    else:
-        next_minute = (
-            current_minute + value - (current_minute % value)
-            if current_minute % value != 0
-            else current_minute + value
-        )
+    minute_remainder = current_minute % value
+    next_minute = current_minute + (value - minute_remainder) if minute_remainder != 0 else current_minute + value
 
     # Handle hour rollover
     next_hour = current_hour + (next_minute // 60)
