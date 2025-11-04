@@ -19,9 +19,11 @@ class ResponseMetadata:
 
     def __init__(self, result: Any):
         self.result = result
-        self._hidden_params: Union[HiddenParams, dict] = (
-            getattr(result, "_hidden_params", {}) or {}
-        )
+        self._hidden_params: Union[HiddenParams, dict] = getattr(result, "_hidden_params", {}) or {}
+
+        # Memoize type check, since _hidden_params does not change
+        self._is_dict = isinstance(self._hidden_params, dict)
+        self._is_hidden_params = not self._is_dict and isinstance(self._hidden_params, HiddenParams)
 
     @property
     def supports_response_time(self) -> bool:
@@ -32,9 +34,7 @@ class ResponseMetadata:
             or isinstance(self.result, TranscriptionResponse)
         )
 
-    def set_hidden_params(
-        self, logging_obj: LiteLLMLoggingObject, model: Optional[str], kwargs: dict
-    ) -> None:
+    def set_hidden_params(self, logging_obj: LiteLLMLoggingObject, model: Optional[str], kwargs: dict) -> None:
         """Set hidden parameters on the response"""
 
         ## ADD OTHER HIDDEN PARAMS
@@ -68,9 +68,9 @@ class ResponseMetadata:
 
     def _get_value_from_hidden_params(self, key: str) -> Optional[Any]:
         """Get value from hidden params - handles when self._hidden_params is a dict or HiddenParams object"""
-        if isinstance(self._hidden_params, dict):
+        if self._is_dict:
             return self._hidden_params.get(key, None)
-        elif isinstance(self._hidden_params, HiddenParams):
+        elif self._is_hidden_params:
             return getattr(self._hidden_params, key, None)
 
     def set_timing_metrics(
@@ -85,7 +85,7 @@ class ResponseMetadata:
         # Set total response time if supported
         if self.supports_response_time:
             self.result._response_ms = total_response_time_ms
-        
+
         #########################################################
         # 1. Add _response_ms total duration
         #########################################################
@@ -106,12 +106,16 @@ class ResponseMetadata:
                     "litellm_overhead_time_ms": overhead_ms,
                 }
             )
-        
+
         #########################################################
         # 3. Add duration for reading from cache
         # In this case overhead from litellm is the difference between the cache read duration and the total response time
         #########################################################
-        if logging_obj.caching_details is not None and logging_obj.caching_details.get("cache_hit") is True and (cache_duration_ms := logging_obj.caching_details.get("cache_duration_ms")) is not None:
+        if (
+            logging_obj.caching_details is not None
+            and logging_obj.caching_details.get("cache_hit") is True
+            and (cache_duration_ms := logging_obj.caching_details.get("cache_duration_ms")) is not None
+        ):
             overhead_ms = total_response_time_ms - cache_duration_ms
             self._update_hidden_params(
                 {
