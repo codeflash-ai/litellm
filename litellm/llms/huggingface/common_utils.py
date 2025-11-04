@@ -72,12 +72,13 @@ def _fetch_inference_provider_mapping(model: str) -> dict:
         ValueError: If no provider mapping is found
         HuggingFaceError: If the API request fails
     """
+    api_key = os.getenv("HUGGINGFACE_API_KEY")
     headers = {"Accept": "application/json"}
-    if os.getenv("HUGGINGFACE_API_KEY"):
-        headers["Authorization"] = f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     path = f"{HF_HUB_URL}/api/models/{model}"
-    params = {"expand": ["inferenceProviderMapping"]}
+    params = (("expand", "inferenceProviderMapping"),)
 
     try:
         response = httpx.get(path, headers=headers, params=params)
