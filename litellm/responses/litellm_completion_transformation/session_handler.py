@@ -13,6 +13,7 @@ from litellm.types.llms.openai import (
     ResponseInputParam,
 )
 from litellm.types.utils import ChatCompletionMessageToolCall, Message, ModelResponse
+from litellm.constants import LITELLM_TRUNCATED_PAYLOAD_FIELD
 
 if TYPE_CHECKING:
     from litellm.responses.litellm_completion_transformation.transformation import (
@@ -238,7 +239,6 @@ class ResponsesSessionHandler:
         1. `LITELLM_TRUNCATED_PAYLOAD_FIELD` is in the proxy server request dict
         2. `litellm.configured_cold_storage_logger` is not None
         """
-        from litellm.constants import LITELLM_TRUNCATED_PAYLOAD_FIELD
         configured_cold_storage_custom_logger = litellm.configured_cold_storage_logger
         if configured_cold_storage_custom_logger is None:
             return False
@@ -246,6 +246,13 @@ class ResponsesSessionHandler:
             return True
         if len(proxy_server_request_dict) == 0:
             return True
+        # Optimize check: first attempt direct key lookup before string conversion
+        if (
+            isinstance(proxy_server_request_dict, dict)
+            and LITELLM_TRUNCATED_PAYLOAD_FIELD in proxy_server_request_dict
+        ):
+            return True
+        # If not found as a key, fall back to current check (string conversion as in original)
         if LITELLM_TRUNCATED_PAYLOAD_FIELD in str(proxy_server_request_dict):
             return True
         return False
