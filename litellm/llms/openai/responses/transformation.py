@@ -459,7 +459,9 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         try:
             raw_response_json = raw_response.json()
         except Exception:
-            raise OpenAIError(
-                message=raw_response.text, status_code=raw_response.status_code
-            )
+            # Avoid double attribute lookup
+            text = raw_response.text
+            status = raw_response.status_code
+            raise OpenAIError(message=text, status_code=status)
+        # Skip unnecessary unpack/kwargs copy if raw_response_json is already the proper structure
         return ResponsesAPIResponse(**raw_response_json)
