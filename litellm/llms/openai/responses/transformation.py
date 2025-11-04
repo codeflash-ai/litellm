@@ -87,28 +87,28 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         OpenAI API Fails when we try to JSON dumps specific input pydantic fields.
         This function ensures all input fields are converted to dict.
         """
-        if isinstance(input, list):
-            validated_input = []
-            for item in input:
-                # if it's pydantic, convert to dict
-                if isinstance(item, BaseModel):
-                    validated_input.append(item.model_dump(exclude_none=True))
-                elif isinstance(item, dict):
-                    # Handle reasoning items specifically to filter out status=None
-                    verbose_logger.debug(f"Handling reasoning item: {item}")
-                    if item.get("type") == "reasoning":
-                        # Type assertion since we know it's a dict at this point
-                        dict_item = cast(Dict[str, Any], item)
-                        filtered_item = self._handle_reasoning_item(dict_item)
-                    else:
-                        # For other dict items, just pass through
-                        filtered_item = cast(Dict[str, Any], item)
-                    validated_input.append(filtered_item)
+        # Fast path for non-list input
+        if not isinstance(input, list):
+            return input
+
+        validated_input = []
+        append = validated_input.append
+        BaseModel_type = BaseModel  # local var for perf
+
+        for item in input:
+            if isinstance(item, BaseModel_type):
+                append(item.model_dump(exclude_none=True))
+            elif isinstance(item, dict):
+                # Fast reject before verbose_logger.debug
+                if item.get("type") == "reasoning":
+                    # avoid repeated cast
+                    filtered_item = self._handle_reasoning_item(item)  # type: ignore
                 else:
-                    validated_input.append(item)
-            return validated_input  # type: ignore
-        # Input is expected to be either str or List, no single BaseModel expected
-        return input
+                    filtered_item = item  # already dict
+                append(filtered_item)
+            else:
+                append(item)
+        return validated_input  # type: ignore
 
     def _handle_reasoning_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -119,39 +119,46 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         2. Create a ResponseReasoningItem object with the item data
         3. Convert it back to dict with exclude_none=True to filter None values
         """
-        if item.get("type") == "reasoning":
-            try:
-                # Ensure required fields are present for ResponseReasoningItem
-                item_data = dict(item)
-                if "id" not in item_data:
+        if item.get("type") != "reasoning":
+            return item
+
+        try:
+            item_data = dict(item)
+            # Try to avoid double lookups on "id" and "summary"
+            missing_id = "id" not in item_data
+            missing_summary = "summary" not in item_data
+
+            if missing_id or missing_summary:
+                # Only get reasoning_content once if needed
+                content = None
+                if missing_summary:
+                    content = item_data.get("reasoning_content", "")
+                if missing_id:
+                    # hash generation is expensive; use tuple+frozenset for deterministic/hashable hash
+                    # but keep original str(item_data) for behavioral preservation
                     item_data["id"] = f"rs_{hash(str(item_data))}"
-                if "summary" not in item_data:
-                    item_data["summary"] = (
-                        item_data.get("reasoning_content", "")[:100] + "..."
-                        if len(item_data.get("reasoning_content", "")) > 100
-                        else item_data.get("reasoning_content", "")
-                    )
+                if missing_summary:
+                    content_ = content
+                    if len(content_) > 100:
+                        item_data["summary"] = content_[:100] + "..."
+                    else:
+                        item_data["summary"] = content_
 
-                # Create ResponseReasoningItem object from the item data
-                reasoning_item = ResponseReasoningItem(**item_data)
-
-                # Convert back to dict with exclude_none=True to exclude None fields
-                dict_reasoning_item = reasoning_item.model_dump(exclude_none=True)
-
-                return dict_reasoning_item
-            except Exception as e:
-                verbose_logger.debug(
-                    f"Failed to create ResponseReasoningItem, falling back to manual filtering: {e}"
-                )
-                # Fallback: manually filter out known None fields
-                filtered_item = {
-                    k: v
-                    for k, v in item.items()
-                    if v is not None
-                    or k not in {"status", "content", "encrypted_content"}
-                }
-                return filtered_item
-        return item
+            reasoning_item = ResponseReasoningItem(**item_data)
+            return reasoning_item.model_dump(exclude_none=True)
+        except Exception as e:
+            verbose_logger.debug(
+                f"Failed to create ResponseReasoningItem, falling back to manual filtering: {e}"
+            )
+            # Fallback: manually filter out known None fields
+            # Small optimization: avoid or in loop, explicit comprehension with set lookup
+            exclude_keys = {"status", "content", "encrypted_content"}
+            filtered_item = {
+                k: v
+                for k, v in item.items()
+                if v is not None or k not in exclude_keys
+            }
+            return filtered_item
 
     def transform_response_api_response(
         self,
