@@ -198,11 +198,13 @@ class ResponsesSessionHandler:
         """
         try:
             metadata_str = spend_log.get("metadata", "{}")
-            if isinstance(metadata_str, str):
+            if isinstance(metadata_str, dict):
+                return metadata_str.get("cold_storage_object_key")
+            elif isinstance(metadata_str, str):
+                if '"cold_storage_object_key"' not in metadata_str:
+                    return None
                 metadata_dict = json.loads(metadata_str)
                 return metadata_dict.get("cold_storage_object_key")
-            elif isinstance(metadata_str, dict):
-                return metadata_str.get("cold_storage_object_key")
             return None
         except (json.JSONDecodeError, TypeError, AttributeError):
             verbose_proxy_logger.debug("Failed to parse metadata from spend log to extract cold storage object key")
