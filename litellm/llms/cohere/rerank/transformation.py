@@ -7,7 +7,7 @@ from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLogging
 from litellm.llms.base_llm.chat.transformation import BaseLLMException
 from litellm.llms.base_llm.rerank.transformation import BaseRerankConfig
 from litellm.secret_managers.main import get_secret_str
-from litellm.types.rerank import OptionalRerankParams, RerankRequest, RerankResponse
+from litellm.types.rerank import RerankRequest, RerankResponse
 
 from ..common_utils import CohereError
 
@@ -58,14 +58,14 @@ class CohereRerankConfig(BaseRerankConfig):
 
         No mapping required - returns all supported params
         """
-        return dict(OptionalRerankParams(
-            query=query,
-            documents=documents,
-            top_n=top_n,
-            rank_fields=rank_fields,
-            return_documents=return_documents,
-            max_chunks_per_doc=max_chunks_per_doc,
-        ))
+        return {
+            "query": query,
+            "documents": documents,
+            "top_n": top_n,
+            "rank_fields": rank_fields,
+            "return_documents": return_documents,
+            "max_chunks_per_doc": max_chunks_per_doc,
+        }
 
     def validate_environment(
         self,
@@ -74,11 +74,7 @@ class CohereRerankConfig(BaseRerankConfig):
         api_key: Optional[str] = None,
     ) -> dict:
         if api_key is None:
-            api_key = (
-                get_secret_str("COHERE_API_KEY")
-                or get_secret_str("CO_API_KEY")
-                or litellm.cohere_key
-            )
+            api_key = get_secret_str("COHERE_API_KEY") or get_secret_str("CO_API_KEY") or litellm.cohere_key
 
         if api_key is None:
             raise ValueError(
@@ -138,9 +134,7 @@ class CohereRerankConfig(BaseRerankConfig):
         try:
             raw_response_json = raw_response.json()
         except Exception:
-            raise CohereError(
-                message=raw_response.text, status_code=raw_response.status_code
-            )
+            raise CohereError(message=raw_response.text, status_code=raw_response.status_code)
 
         return RerankResponse(**raw_response_json)
 
