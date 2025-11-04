@@ -20,6 +20,8 @@ from litellm.types.llms.openai import AllMessageValues
 from litellm.types.utils import ModelResponse, ProviderField
 from litellm.utils import _add_path_to_api_base, supports_tool_choice
 
+_API_KEY_HEADER_CACHE = {}
+
 
 class AzureFoundryErrorStrings(str, enum.Enum):
     SET_EXTRA_PARAMETERS_TO_PASS_THROUGH = "Set extra-parameters to 'pass-through'"
@@ -64,8 +66,16 @@ class AzureAIStudioConfig(OpenAIConfig):
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
     ) -> dict:
-        if api_base and self._should_use_api_key_header(api_base):
-            headers["api-key"] = api_key
+        if api_base:
+            cached_result = _API_KEY_HEADER_CACHE.get(api_base)
+            if cached_result is None:
+                cached_result = self._should_use_api_key_header(api_base)
+                _API_KEY_HEADER_CACHE[api_base] = cached_result
+
+            if cached_result:
+                headers["api-key"] = api_key
+            else:
+                headers["Authorization"] = f"Bearer {api_key}"
         else:
             headers["Authorization"] = f"Bearer {api_key}"
 
