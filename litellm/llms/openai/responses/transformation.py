@@ -57,6 +57,8 @@ class OpenAIResponsesAPIConfig(BaseResponsesAPIConfig):
         drop_params: bool,
     ) -> Dict:
         """No mapping applied since inputs are in OpenAI spec already"""
+        if type(response_api_optional_params) is dict:
+            return response_api_optional_params
         return dict(response_api_optional_params)
 
     def transform_responses_api_request(
