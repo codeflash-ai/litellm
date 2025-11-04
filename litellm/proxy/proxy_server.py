@@ -47,6 +47,7 @@ from litellm.types.utils import (
     TokenCountResponse,
 )
 from litellm.utils import load_credentials_from_list
+from litellm.proxy._types import Any, Dict, Optional
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -1803,6 +1804,9 @@ class ProxyConfig:
         global prisma_client, store_model_in_db
         # Load existing config
 
+        # Load existing config
+
+        config = None
         if os.environ.get("LITELLM_CONFIG_BUCKET_NAME") is not None:
             bucket_name = os.environ.get("LITELLM_CONFIG_BUCKET_NAME")
             object_key = os.environ.get("LITELLM_CONFIG_BUCKET_OBJECT_KEY")
@@ -1832,9 +1836,12 @@ class ProxyConfig:
                 store_model_in_db=store_model_in_db,
             )
 
-        ## PRINT YAML FOR CONFIRMING IT WORKS
-        printed_yaml = copy.deepcopy(config)
-        printed_yaml.pop("environment_variables", None)
+        # Remove "environment_variables" from printed_yaml (for debugging/confirmation only)
+        printed_yaml = config.copy()
+        if "environment_variables" in printed_yaml:
+            del printed_yaml["environment_variables"]
+        # (No output uses printed_yaml, so this remains simply as an optional log/output step.)
+
 
         config = self._check_for_os_environ_vars(config=config)
 

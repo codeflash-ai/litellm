@@ -314,8 +314,13 @@ async def _update_litellm_setting(
             },
         )
 
+    # Memoize model_dump as it's used multiple times
+    settings_dict = settings.model_dump(exclude_none=True)
+
     # Update the in-memory settings
-    in_memory_var = settings.model_dump(exclude_none=True)
+    in_memory_var = settings_dict
+
+    # Load existing config
 
     # Load existing config
     config = await proxy_config.get_config()
@@ -324,7 +329,9 @@ async def _update_litellm_setting(
     if "litellm_settings" not in config:
         config["litellm_settings"] = {}
 
-    config["litellm_settings"][settings_key] = settings.model_dump(exclude_none=True)
+    config["litellm_settings"][settings_key] = settings_dict
+
+    # Save the updated config
 
     # Save the updated config
     await proxy_config.save_config(new_config=config)
