@@ -60,12 +60,8 @@ class SagemakerConfig(BaseConfig):
     def get_config(cls):
         return super().get_config()
 
-    def get_error_class(
-        self, error_message: str, status_code: int, headers: Union[dict, Headers]
-    ) -> BaseLLMException:
-        return SagemakerError(
-            message=error_message, status_code=status_code, headers=headers
-        )
+    def get_error_class(self, error_message: str, status_code: int, headers: Union[dict, Headers]) -> BaseLLMException:
+        return SagemakerError(message=error_message, status_code=status_code, headers=headers)
 
     def get_supported_openai_params(self, model: str) -> List:
         return ["stream", "temperature", "max_tokens", "max_completion_tokens", "top_p", "stop", "n"]
@@ -77,35 +73,40 @@ class SagemakerConfig(BaseConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
+        # OPTIMIZATION: Avoid repeated sequential if-checks, handle all mapped params via a lookup table.
+        # Short-circuit most common paths while retaining exact logic.
+
+        # Avoid repeated lookups
+        get_ndp = non_default_params.get
+
+        # local bool as used per original behavior (to avoid communicating with input dict repeatedly)
+        allow_zero_temp = get_ndp("aws_sagemaker_allow_zero_temp", False)
+
+        # Precompute set for quick is-in checks
+        direct_keys = {"top_p": "top_p", "stream": "stream", "stop": "stop"}
+
+        # Batch most existing behavior into a single loop
         for param, value in non_default_params.items():
             if param == "temperature":
                 if value == 0.0 or value == 0:
-                    # hugging face exception raised when temp==0
-                    # Failed: Error occurred: HuggingfaceException - Input validation error: `temperature` must be strictly positive
-                    if not non_default_params.get(
-                        "aws_sagemaker_allow_zero_temp", False
-                    ):
+                    if not allow_zero_temp:
                         value = 0.01
 
                 optional_params["temperature"] = value
-            if param == "top_p":
-                optional_params["top_p"] = value
-            if param == "n":
+            elif param in direct_keys:
+                optional_params[direct_keys[param]] = value
+            elif param == "n":
                 optional_params["best_of"] = value
-                optional_params[
-                    "do_sample"
-                ] = True  # Need to sample if you want best of for hf inference endpoints
-            if param == "stream":
-                optional_params["stream"] = value
-            if param == "stop":
-                optional_params["stop"] = value
-            if param == "max_tokens":
+                optional_params["do_sample"] = True  # Need to sample if you want best of for hf inference endpoints
+            elif param == "max_tokens":
+                # HF TGI raises the following exception when max_new_tokens==0
+                # Failed: Error occurred: HuggingfaceException - Input validation error: `max_new_tokens` must be strictly positive
                 # HF TGI raises the following exception when max_new_tokens==0
                 # Failed: Error occurred: HuggingfaceException - Input validation error: `max_new_tokens` must be strictly positive
                 if value == 0:
                     value = 1
                 optional_params["max_new_tokens"] = value
-            if param == "max_completion_tokens":
+            elif param == "max_completion_tokens":
                 optional_params["max_new_tokens"] = value
         non_default_params.pop("aws_sagemaker_allow_zero_temp", None)
         return optional_params
@@ -122,9 +123,7 @@ class SagemakerConfig(BaseConfig):
             model_prompt_details = custom_prompt_dict[model]
             prompt = custom_prompt(
                 role_dict=model_prompt_details.get("roles", None),
-                initial_prompt_value=model_prompt_details.get(
-                    "initial_prompt_value", ""
-                ),
+                initial_prompt_value=model_prompt_details.get("initial_prompt_value", ""),
                 final_prompt_value=model_prompt_details.get("final_prompt_value", ""),
                 messages=messages,
             )
@@ -133,9 +132,7 @@ class SagemakerConfig(BaseConfig):
             model_prompt_details = custom_prompt_dict[hf_model_name]
             prompt = custom_prompt(
                 role_dict=model_prompt_details.get("roles", None),
-                initial_prompt_value=model_prompt_details.get(
-                    "initial_prompt_value", ""
-                ),
+                initial_prompt_value=model_prompt_details.get("initial_prompt_value", ""),
                 final_prompt_value=model_prompt_details.get("final_prompt_value", ""),
                 messages=messages,
             )
@@ -167,9 +164,7 @@ class SagemakerConfig(BaseConfig):
         if stream is True:
             data["stream"] = True
 
-        custom_prompt_dict = (
-            litellm_params.get("custom_prompt_dict", None) or litellm.custom_prompt_dict
-        )
+        custom_prompt_dict = litellm_params.get("custom_prompt_dict", None) or litellm.custom_prompt_dict
 
         hf_model_name = litellm_params.get("hf_model_name", None)
 
@@ -191,9 +186,7 @@ class SagemakerConfig(BaseConfig):
         litellm_params: dict,
         headers: dict,
     ) -> dict:
-        return await asyncify(self.transform_request)(
-            model, messages, optional_params, litellm_params, headers
-        )
+        return await asyncify(self.transform_request)(model, messages, optional_params, litellm_params, headers)
 
     def transform_response(
         self,
@@ -278,5 +271,3 @@ class SagemakerConfig(BaseConfig):
             headers = {"Content-Type": "application/json", **headers}
 
         return headers
-
-
