@@ -390,12 +390,12 @@ def _handle_month_reset(
         next_year = current_time.year
 
     return datetime(
-        year=next_year,
-        month=next_month,
-        day=1,
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-        tzinfo=current_time.tzinfo,
+        next_year,
+        next_month,
+        1,
+        0,
+        0,
+        0,
+        0,
+        current_time.tzinfo,
     )
