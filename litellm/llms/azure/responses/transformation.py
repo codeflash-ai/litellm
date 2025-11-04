@@ -165,6 +165,17 @@ class AzureOpenAIResponsesAPIConfig(OpenAIResponsesAPIConfig):
         """
         Constructs a URL for the API request with the response_id in the path.
         """
+        # Avoid repeated imports and extra object creation; parse manually if simple case
+        # Fast path: api_base has no params/query/fragment. Otherwise fall back to urlparse.
+        if (
+            '?' not in api_base and 
+            '#' not in api_base and 
+            ';' not in api_base
+        ):
+            base = api_base.rstrip('/')
+            return f"{base}/{response_id}"
+
+        # Fallback for full parsing for uncommon complex URLs
         from urllib.parse import urlparse, urlunparse
 
         # Parse the URL to separate its components
