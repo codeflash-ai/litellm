@@ -44,9 +44,7 @@ class ResponsesAPIRequestUtils:
             if k not in supported_params:
                 unsupported_params[k] = non_default_params[k]
         if unsupported_params:
-            if litellm.drop_params is True or (
-                drop_params is not None and drop_params is True
-            ):
+            if litellm.drop_params is True or (drop_params is not None and drop_params is True):
                 pass
             else:
                 raise litellm.UnsupportedParamsError(
@@ -76,9 +74,7 @@ class ResponsesAPIRequestUtils:
 
         # Remove None values and internal parameters
         # Get supported parameters for the model
-        supported_params = responses_api_provider_config.get_supported_openai_params(
-            model
-        )
+        supported_params = responses_api_provider_config.get_supported_openai_params(model)
 
         non_default_params = cast(Dict, response_api_optional_params)
         # Check for unsupported parameters
@@ -126,30 +122,28 @@ class ResponsesAPIRequestUtils:
         special_params = params.pop("kwargs", {})
 
         additional_drop_params = params.pop("additional_drop_params", None)
-        non_default_params = (
-            PreProcessNonDefaultParams.base_pre_process_non_default_params(
-                passed_params=params,
-                special_params=special_params,
-                custom_llm_provider=custom_llm_provider,
-                additional_drop_params=additional_drop_params,
-                default_param_values={k: None for k in valid_keys},
-                additional_endpoint_specific_params=["input"],
-            )
+        non_default_params = PreProcessNonDefaultParams.base_pre_process_non_default_params(
+            passed_params=params,
+            special_params=special_params,
+            custom_llm_provider=custom_llm_provider,
+            additional_drop_params=additional_drop_params,
+            default_param_values={k: None for k in valid_keys},
+            additional_endpoint_specific_params=["input"],
         )
 
         # decode previous_response_id if it's a litellm encoded id
         if "previous_response_id" in non_default_params:
-            decoded_previous_response_id = ResponsesAPIRequestUtils.decode_previous_response_id_to_original_previous_response_id(
-                non_default_params["previous_response_id"]
+            decoded_previous_response_id = (
+                ResponsesAPIRequestUtils.decode_previous_response_id_to_original_previous_response_id(
+                    non_default_params["previous_response_id"]
+                )
             )
             non_default_params["previous_response_id"] = decoded_previous_response_id
 
         if "metadata" in non_default_params:
             from litellm.utils import add_openai_metadata
 
-            non_default_params["metadata"] = add_openai_metadata(
-                non_default_params["metadata"]
-            )
+            non_default_params["metadata"] = add_openai_metadata(non_default_params["metadata"])
 
         return cast(ResponsesAPIOptionalRequestParams, non_default_params)
 
@@ -191,9 +185,7 @@ class ResponsesAPIRequestUtils:
 
         # access the response id based on the object type
         response_id = (
-            responses_api_response["id"]
-            if isinstance(responses_api_response, dict)
-            else responses_api_response.id
+            responses_api_response["id"] if isinstance(responses_api_response, dict) else responses_api_response.id
         )
 
         updated_id = ResponsesAPIRequestUtils._build_responses_api_response_id(
@@ -215,12 +207,10 @@ class ResponsesAPIRequestUtils:
         response_id: str,
     ) -> str:
         """Build the responses_api_response_id"""
-        assembled_id: str = str(
-            SpecialEnums.LITELLM_MANAGED_RESPONSE_COMPLETE_STR.value
-        ).format(custom_llm_provider, model_id, response_id)
-        base64_encoded_id: str = base64.b64encode(assembled_id.encode("utf-8")).decode(
-            "utf-8"
+        assembled_id: str = str(SpecialEnums.LITELLM_MANAGED_RESPONSE_COMPLETE_STR.value).format(
+            custom_llm_provider, model_id, response_id
         )
+        base64_encoded_id: str = base64.b64encode(assembled_id.encode("utf-8")).decode("utf-8")
         return f"resp_{base64_encoded_id}"
 
     @staticmethod
@@ -252,16 +242,12 @@ class ResponsesAPIRequestUtils:
             custom_llm_provider = None
             model_id = None
 
-            if (
-                len(parts) >= 3
-            ):  # Full format with custom_llm_provider, model_id, and response_id
+            if len(parts) >= 3:  # Full format with custom_llm_provider, model_id, and response_id
                 custom_llm_provider_part = parts[0]
                 model_id_part = parts[1]
                 response_part = parts[2]
 
-                custom_llm_provider = custom_llm_provider_part.replace(
-                    "litellm:custom_llm_provider:", ""
-                )
+                custom_llm_provider = custom_llm_provider_part.replace("litellm:custom_llm_provider:", "")
                 model_id = model_id_part.replace("model_id:", "")
                 decoded_response_id = response_part.replace("response_id:", "")
             else:
@@ -285,9 +271,7 @@ class ResponsesAPIRequestUtils:
         """Get the model_id from the response_id"""
         if response_id is None:
             return None
-        decoded_response_id = (
-            ResponsesAPIRequestUtils._decode_responses_api_response_id(response_id)
-        )
+        decoded_response_id = ResponsesAPIRequestUtils._decode_responses_api_response_id(response_id)
         return decoded_response_id.get("model_id") or None
 
     @staticmethod
@@ -307,11 +291,7 @@ class ResponsesAPIRequestUtils:
         Returns:
             The original previous_response_id
         """
-        decoded_response_id = (
-            ResponsesAPIRequestUtils._decode_responses_api_response_id(
-                previous_response_id
-            )
-        )
+        decoded_response_id = ResponsesAPIRequestUtils._decode_responses_api_response_id(previous_response_id)
         return decoded_response_id.get("response_id", previous_response_id)
 
     @staticmethod
@@ -370,9 +350,7 @@ class ResponseAPILoggingUtils:
                 completion_tokens=0,
                 total_tokens=0,
             )
-        response_api_usage: ResponseAPIUsage = (
-            ResponseAPIUsage(**usage) if isinstance(usage, dict) else usage
-        )
+        response_api_usage: ResponseAPIUsage = ResponseAPIUsage(**usage) if isinstance(usage, dict) else usage
         prompt_tokens: int = response_api_usage.input_tokens or 0
         completion_tokens: int = response_api_usage.output_tokens or 0
         prompt_tokens_details: Optional[PromptTokensDetails] = None
