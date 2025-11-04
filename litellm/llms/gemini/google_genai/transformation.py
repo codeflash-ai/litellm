@@ -106,9 +106,7 @@ class GoogleGenAIConfig(BaseGoogleGenAIGenerateContentConfig, VertexLLM):
             Mapped parameters for the provider
         """
         _generate_content_config_dict: Dict[str, Any] = {}
-        supported_google_genai_params = (
-            self.get_supported_generate_content_optional_params(model)
-        )
+        supported_google_genai_params = self.get_supported_generate_content_optional_params(model)
         for param, value in generate_content_config_dict.items():
             if param in supported_google_genai_params:
                 _generate_content_config_dict[param] = value
@@ -126,11 +124,12 @@ class GoogleGenAIConfig(BaseGoogleGenAIGenerateContentConfig, VertexLLM):
         }
         # Use the passed api_key first, then fall back to litellm_params and environment
         gemini_api_key = api_key or self._get_google_ai_studio_api_key(
-            dict(litellm_params or {})
+            dict(litellm_params) if litellm_params is not None else {}
         )
         if gemini_api_key is not None:
             default_headers[self.XGOOGLE_API_KEY] = gemini_api_key
-        if headers is not None:
+        if headers:
+            # Fewer checks; update only if headers is really non-empty
             default_headers.update(headers)
 
         return default_headers
@@ -206,9 +205,7 @@ class GoogleGenAIConfig(BaseGoogleGenAIGenerateContentConfig, VertexLLM):
         """
         Sync version of get_auth_token_and_url.
         """
-        vertex_credentials, vertex_project, vertex_location = (
-            self._get_common_auth_components(litellm_params)
-        )
+        vertex_credentials, vertex_project, vertex_location = self._get_common_auth_components(litellm_params)
 
         _auth_header, vertex_project = self._ensure_access_token(
             credentials=vertex_credentials,
@@ -245,9 +242,7 @@ class GoogleGenAIConfig(BaseGoogleGenAIGenerateContentConfig, VertexLLM):
         Returns:
             Tuple of headers and API base
         """
-        vertex_credentials, vertex_project, vertex_location = (
-            self._get_common_auth_components(litellm_params)
-        )
+        vertex_credentials, vertex_project, vertex_location = self._get_common_auth_components(litellm_params)
 
         _auth_header, vertex_project = await self._ensure_access_token_async(
             credentials=vertex_credentials,
