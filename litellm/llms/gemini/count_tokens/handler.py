@@ -5,6 +5,7 @@ import httpx
 import litellm
 from litellm.llms.custom_httpx.http_handler import get_async_httpx_client
 from litellm.types.utils import LlmProviders
+from litellm.llms.gemini.google_genai.transformation import GoogleGenAIConfig
 
 if TYPE_CHECKING:
     from litellm.types.google_genai.main import GenerateContentContentListUnionDict
@@ -39,9 +40,7 @@ class GoogleAIStudioTokenCounter:
                     function_response_data = part["functionResponse"]
                     function_response_part = FunctionResponse(**function_response_data)
                     function_response_part.id = None
-                    part["functionResponse"] = function_response_part.model_dump(
-                        exclude_none=True
-                    )
+                    part["functionResponse"] = function_response_part.model_dump(exclude_none=True)
 
         return cleaned_contents
 
@@ -63,9 +62,8 @@ class GoogleAIStudioTokenCounter:
         """
         Returns a Tuple of headers and url for the Google Gen AI Studio countTokens endpoint.
         """
-        from litellm.llms.gemini.google_genai.transformation import GoogleGenAIConfig
-
-        headers = GoogleGenAIConfig().validate_environment(
+        config_instance = GoogleGenAIConfig()
+        headers = config_instance.validate_environment(
             api_key=api_key,
             headers=headers,
             model=model,
@@ -135,9 +133,7 @@ class GoogleAIStudioTokenCounter:
         )
 
         try:
-            response = await async_httpx_client.post(
-                url=url, headers=headers, json=request_body
-            )
+            response = await async_httpx_client.post(url=url, headers=headers, json=request_body)
 
             # Check for HTTP errors
             response.raise_for_status()
@@ -156,9 +152,7 @@ class GoogleAIStudioTokenCounter:
             ) from e
         except httpx.RequestError as e:
             error_msg = f"Request to Google Gen AI Studio failed: {str(e)}"
-            raise litellm.APIConnectionError(
-                message=error_msg, llm_provider="gemini", model=model
-            ) from e
+            raise litellm.APIConnectionError(message=error_msg, llm_provider="gemini", model=model) from e
         except Exception as e:
             error_msg = f"Unexpected error during token counting: {str(e)}"
             raise Exception(error_msg) from e
