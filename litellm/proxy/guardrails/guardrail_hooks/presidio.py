@@ -163,18 +163,20 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
 
         API Ref: https://microsoft.github.io/presidio/api-docs/api-docs.html#tag/Analyzer/paths/~1analyze/post
         """
-        analyze_payload: PresidioAnalyzeRequest = PresidioAnalyzeRequest(
-            text=text,
-            language=self.presidio_language,
-        )
-        ##################################################################
-        ###### Check if user has configured any params for this guardrail
-        ################################################################
-        if self.ad_hoc_recognizers is not None:
-            analyze_payload["ad_hoc_recognizers"] = self.ad_hoc_recognizers
+        # Use dict directly for analyze_payload to avoid repeated casting and dict operations.
+        analyze_payload = {
+            "text": text,
+            "language": self.presidio_language,
+        }
+        ad_hoc_recognizers = getattr(self, "ad_hoc_recognizers", None)
+        if ad_hoc_recognizers is not None:
+            analyze_payload["ad_hoc_recognizers"] = ad_hoc_recognizers
 
-        if self.pii_entities_config:
-            analyze_payload["entities"] = list(self.pii_entities_config.keys())
+        # Only add "entities" if config is not empty (avoid unnecessary list)
+        pii_entities_config = self.pii_entities_config
+        if pii_entities_config:
+            analyze_payload["entities"] = list(pii_entities_config.keys())
+
 
         ##################################################################
         ######### End of adding config params
@@ -184,11 +186,12 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
         if presidio_config and presidio_config.language:
             analyze_payload["language"] = presidio_config.language
 
-        casted_analyze_payload: dict = cast(dict, analyze_payload)
-        casted_analyze_payload.update(
-            self.get_guardrail_dynamic_request_body_params(request_data=request_data)
-        )
-        return cast(PresidioAnalyzeRequest, casted_analyze_payload)
+        # Update with dynamic request body params (do this last to allow client overrides as originally)
+        dynamic_params = self.get_guardrail_dynamic_request_body_params(request_data=request_data)
+        if dynamic_params:
+            analyze_payload.update(dynamic_params)
+
+        return cast(PresidioAnalyzeRequest, analyze_payload)
 
     async def analyze_text(
         self,
@@ -200,34 +203,40 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
         Send text to the Presidio analyzer endpoint and get analysis results
         """
         try:
+            # Only create ClientSession if not doing mock
+            if self.mock_redacted_text is not None:
+                return self.mock_redacted_text
+
+            analyze_url = f"{self.presidio_analyzer_api_base}analyze"
+
+            # Prepare the analyze payload outside of aiohttp scope to minimize async context time
+            analyze_payload: PresidioAnalyzeRequest = (
+                self._get_presidio_analyze_request_payload(
+                    text=text,
+                    presidio_config=presidio_config,
+                    request_data=request_data,
+                )
+            )
+
+            verbose_proxy_logger.debug(
+                "Making request to: %s with payload: %s",
+                analyze_url,
+                analyze_payload,
+            )
+
             async with aiohttp.ClientSession() as session:
-                if self.mock_redacted_text is not None:
-                    return self.mock_redacted_text
-
-                # Make the request to /analyze
-                analyze_url = f"{self.presidio_analyzer_api_base}analyze"
-
-                analyze_payload: PresidioAnalyzeRequest = (
-                    self._get_presidio_analyze_request_payload(
-                        text=text,
-                        presidio_config=presidio_config,
-                        request_data=request_data,
-                    )
-                )
-
-                verbose_proxy_logger.debug(
-                    "Making request to: %s with payload: %s",
-                    analyze_url,
-                    analyze_payload,
-                )
 
                 async with session.post(analyze_url, json=analyze_payload) as response:
                     analyze_results = await response.json()
-                    verbose_proxy_logger.debug("analyze_results: %s", analyze_results)
-                    final_results = []
-                    for item in analyze_results:
-                        final_results.append(PresidioAnalyzeResponseItem(**item))
-                    return final_results
+
+            verbose_proxy_logger.debug("analyze_results: %s", analyze_results)
+            # Preallocate list for final_results if possible (performance: reduce list resizes)
+            # Only use PresidioAnalyzeResponseItem if list/response is expected, else return as-is
+            if isinstance(analyze_results, list):
+                # Use list comprehension for performance over loop+append
+                return [PresidioAnalyzeResponseItem(**item) for item in analyze_results]
+            # Fallback: return as is (e.g. if error or unexpected format)
+            return analyze_results
         except Exception as e:
             raise e
 
