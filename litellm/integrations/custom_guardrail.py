@@ -322,18 +322,21 @@ class CustomGuardrail(CustomLogger):
         Args:
             request_data: The original `request_data` passed to LiteLLM Proxy
         """
+        if not self.guardrail_name:
+            return {}
+
         requested_guardrails = self.get_guardrail_from_metadata(request_data)
 
         # Look for the guardrail configuration matching self.guardrail_name
         for guardrail in requested_guardrails:
             if isinstance(guardrail, dict) and self.guardrail_name in guardrail:
+                if self._validate_premium_user() is not True:
+                    return {}
+
                 # Get the configuration for this guardrail
                 guardrail_config: DynamicGuardrailParams = DynamicGuardrailParams(
                     **guardrail[self.guardrail_name]
                 )
-                if self._validate_premium_user() is not True:
-                    return {}
-
                 # Return the extra_body if it exists, otherwise empty dict
                 return guardrail_config.get("extra_body", {})
 
