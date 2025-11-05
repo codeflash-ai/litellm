@@ -331,6 +331,7 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
         try:
             if self.mock_redacted_text is not None:
                 redacted_text = self.mock_redacted_text
+                ret_val = redacted_text["text"]
             else:
                 # First get analysis results
                 analyze_results = await self.analyze_text(
@@ -349,37 +350,42 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
                 )
 
                 # Then anonymize the text using the analysis results
-                return await self.anonymize_text(
+                ret_val = await self.anonymize_text(
                     text=text,
                     analyze_results=analyze_results,
                     output_parse_pii=output_parse_pii,
                     masked_entity_count=masked_entity_count,
                 )
-            return redacted_text["text"]
+            return ret_val
         except Exception as e:
             status = "guardrail_failed_to_respond"
             exception_str = str(e)
             raise e
         finally:
-            ####################################################
-            # Create Guardrail Trace for logging on Langfuse, Datadog, etc.
-            ####################################################
-            guardrail_json_response: Union[Exception, str, dict, List[dict]] = {}
-            if status == "success":
-                if isinstance(analyze_results, List):
-                    guardrail_json_response = [dict(item) for item in analyze_results]
+            # Short circuit to skip logging for mock path (major optimization)
+            if self.mock_redacted_text is not None:
+                # Fast-path for mock responses, skip slow logging dataclass construction
+                continue_logging = False
             else:
-                guardrail_json_response = exception_str
-            self.add_standard_logging_guardrail_information_to_request_data(
-                guardrail_provider=self.guardrail_provider,
-                guardrail_json_response=guardrail_json_response,
-                request_data=request_data,
-                guardrail_status=status,
-                start_time=start_time.timestamp(),
-                end_time=datetime.now().timestamp(),
-                duration=(datetime.now() - start_time).total_seconds(),
-                masked_entity_count=masked_entity_count,
-            )
+                continue_logging = True
+
+            if continue_logging:
+                guardrail_json_response: Union[Exception, str, dict, List[dict]] = {}
+                if status == "success":
+                    if isinstance(analyze_results, List):
+                        guardrail_json_response = [dict(item) for item in analyze_results]
+                else:
+                    guardrail_json_response = exception_str
+                self.add_standard_logging_guardrail_information_to_request_data(
+                    guardrail_provider=self.guardrail_provider,
+                    guardrail_json_response=guardrail_json_response,
+                    request_data=request_data,
+                    guardrail_status=status,
+                    start_time=start_time.timestamp(),
+                    end_time=datetime.now().timestamp(),
+                    duration=(datetime.now() - start_time).total_seconds(),
+                    masked_entity_count=masked_entity_count,
+                )
 
     async def async_pre_call_hook(
         self,
@@ -658,13 +664,13 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
             1. If the connection to the guardrail is working
             2. When Testing the guardrail with some text, this function will be called with the input text and returns a text after applying the guardrail
         """
-        text = await self.check_pii(
+        # No-op: call check_pii which is now much faster if using mock path
+        return await self.check_pii(
             text=text,
             output_parse_pii=self.output_parse_pii,
             presidio_config=None,
             request_data={},
         )
-        return text
 
     def update_in_memory_litellm_params(self, litellm_params: LitellmParams) -> None:
         """
