@@ -184,11 +184,14 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
         if presidio_config and presidio_config.language:
             analyze_payload["language"] = presidio_config.language
 
-        casted_analyze_payload: dict = cast(dict, analyze_payload)
-        casted_analyze_payload.update(
-            self.get_guardrail_dynamic_request_body_params(request_data=request_data)
-        )
-        return cast(PresidioAnalyzeRequest, casted_analyze_payload)
+        # Only update if there might be extras (skip copying empty dict)
+        dynamic_body = self.get_guardrail_dynamic_request_body_params(request_data=request_data)
+        if dynamic_body:
+            casted_analyze_payload: dict = cast(dict, analyze_payload)
+            casted_analyze_payload.update(dynamic_body)
+            return cast(PresidioAnalyzeRequest, casted_analyze_payload)
+        else:
+            return analyze_payload
 
     async def analyze_text(
         self,
