@@ -32,6 +32,12 @@ else:
     GenerateContentResponse = Any
     ToolConfigDict = Any
 
+_USAGE_METADATA = {
+    "promptTokenCount": 10,
+    "candidatesTokenCount": 20,
+    "totalTokenCount": 30,
+}
+
 
 ####### ENVIRONMENT VARIABLES ###################
 # Initialize any necessary instances or variables here
@@ -72,11 +78,7 @@ class GenerateContentHelper:
                     "safetyRatings": [],
                 }
             ],
-            "usageMetadata": {
-                "promptTokenCount": 10,
-                "candidatesTokenCount": 20,
-                "totalTokenCount": 30,
-            },
+            "usageMetadata": _USAGE_METADATA,
         }
 
     @staticmethod
