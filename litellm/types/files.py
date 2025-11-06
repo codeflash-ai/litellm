@@ -159,9 +159,16 @@ def get_file_extension_from_mime_type(mime_type: str) -> str:
 
 
 def get_file_type_from_extension(extension: str) -> FileType:
-    for file_type, extensions in FILE_EXTENSIONS.items():
-        if extension.lower() in extensions:
-            return file_type
+    if not hasattr(get_file_type_from_extension, "_ext_to_file_type"):
+        ext_to_file_type = {}
+        for file_type, extensions in FILE_EXTENSIONS.items():
+            for ext in extensions:
+                ext_to_file_type[ext] = file_type
+        get_file_type_from_extension._ext_to_file_type = ext_to_file_type  # type: ignore[attr-defined]
+
+    ext_lower = extension.lower()
+    if ext_lower in get_file_type_from_extension._ext_to_file_type:  # type: ignore[attr-defined]
+        return get_file_type_from_extension._ext_to_file_type[ext_lower]  # type: ignore[attr-defined]
 
     raise ValueError(f"Unknown file type for extension: {extension}")
 
