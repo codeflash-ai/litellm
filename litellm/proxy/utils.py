@@ -34,6 +34,7 @@ from litellm.proxy._types import (
 )
 from litellm.types.guardrails import GuardrailEventHooks
 from litellm.types.utils import CallTypes
+from urllib.parse import quote_plus
 
 try:
     import backoff
@@ -3705,28 +3706,34 @@ def construct_database_url_from_env_vars() -> Optional[str]:
     Returns:
         Optional[str]: The constructed DATABASE_URL or None if required variables are missing
     """
-    import urllib.parse
+    # Fetch all environment variables in one go
+    env = os.environ
 
-    # Check if all required variables are provided
-    database_host = os.getenv("DATABASE_HOST")
-    database_username = os.getenv("DATABASE_USERNAME")
-    database_password = os.getenv("DATABASE_PASSWORD")
-    database_name = os.getenv("DATABASE_NAME")
-    database_schema = os.getenv("DATABASE_SCHEMA")
+    database_host = env.get("DATABASE_HOST")
+    database_username = env.get("DATABASE_USERNAME")
+    database_password = env.get("DATABASE_PASSWORD")
+    database_name = env.get("DATABASE_NAME")
+    database_schema = env.get("DATABASE_SCHEMA")
+
 
     if database_host and database_username and database_name:
-        # Handle the problem of special character escaping in the database URL
-        database_username_enc = urllib.parse.quote_plus(database_username)
-        database_password_enc = (
-            urllib.parse.quote_plus(database_password) if database_password else ""
-        )
-        database_name_enc = urllib.parse.quote_plus(database_name)
+        # Pre-escape only required values
+        database_username_enc = quote_plus(database_username)
+        database_name_enc = quote_plus(database_name)
+
 
         # Construct DATABASE_URL from the provided variables
         if database_password:
-            database_url = f"postgresql://{database_username_enc}:{database_password_enc}@{database_host}/{database_name_enc}"
+            database_password_enc = quote_plus(database_password)
+            database_url = (
+                f"postgresql://{database_username_enc}:{database_password_enc}" 
+                f"@{database_host}/{database_name_enc}"
+            )
         else:
-            database_url = f"postgresql://{database_username_enc}@{database_host}/{database_name_enc}"
+            database_url = (
+                f"postgresql://{database_username_enc}@{database_host}/{database_name_enc}"
+            )
+
 
         if database_schema:
             database_url += f"?schema={database_schema}"
