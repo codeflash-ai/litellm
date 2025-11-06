@@ -34,6 +34,8 @@ from litellm.proxy._types import (
 )
 from litellm.types.guardrails import GuardrailEventHooks
 from litellm.types.utils import CallTypes
+import datetime
+import litellm.litellm_core_utils
 
 try:
     import backoff
@@ -3051,11 +3053,10 @@ async def _cache_user_row(user_id: str, cache: DualCache, db: PrismaClient):
     if response is None:  # Cache miss
         user_row = await db.get_data(user_id=user_id)
         if user_row is not None:
-            print_verbose(f"User Row: {user_row}, type = {type(user_row)}")
-            if hasattr(user_row, "model_dump_json") and callable(
-                getattr(user_row, "model_dump_json")
-            ):
-                cache_value = user_row.model_dump_json()
+            # Cache expensive attribute lookups
+            mdj_method = getattr(user_row, "model_dump_json", None)
+            if mdj_method is not None and callable(mdj_method):
+                cache_value = mdj_method()
                 cache.set_cache(
                     key=cache_key, value=cache_value, ttl=600
                 )  # store for 10 minutes
