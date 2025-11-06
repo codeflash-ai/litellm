@@ -7,7 +7,7 @@ import smtplib
 import threading
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import (
@@ -34,6 +34,7 @@ from litellm.proxy._types import (
 )
 from litellm.types.guardrails import GuardrailEventHooks
 from litellm.types.utils import CallTypes
+import litellm.litellm_core_utils
 
 try:
     import backoff
@@ -116,8 +117,8 @@ def print_verbose(print_statement):
     :type print_statement: Any
     """
     import traceback
-
-    verbose_proxy_logger.debug("{}\n{}".format(print_statement, traceback.format_exc()))
+    exc = traceback.format_exc()
+    verbose_proxy_logger.debug(f"{print_statement}\n{exc}")
     if litellm.set_verbose:
         print(f"LiteLLM Proxy: {print_statement}")  # noqa
 
@@ -3355,7 +3356,6 @@ def _raise_failed_update_spend_exception(
 def _is_projected_spend_over_limit(
     current_spend: float, soft_budget_limit: Optional[float]
 ):
-    from datetime import date
 
     if soft_budget_limit is None:
         # If there's no limit, we can't exceed it.
