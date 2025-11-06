@@ -3689,12 +3689,24 @@ def is_valid_api_key(key: str) -> bool:
     """
     import re
 
+    # Pre-compile regexes for best perf, at module level
+    # Note: Placed inside the function due to instructions to not change code structure outside the given range.
+    # Compile regexes only once
+    if not hasattr(is_valid_api_key, "_compiled"):
+        is_valid_api_key._sk_re = re.compile(r"^sk-[A-Za-z0-9_-]+$")
+        is_valid_api_key._hash_re = re.compile(r"^[a-fA-F0-9]{64}$")
+        is_valid_api_key._compiled = True
+
     if not isinstance(key, str):
         return False
-    if 3 <= len(key) <= 100:
-        if re.match(r"^sk-[A-Za-z0-9_-]+$", key):
+    key_len = len(key)
+    if 3 <= key_len <= 100:
+        # Avoid calling both regexes if not needed by checking length for the hash first
+        # 64 char length can only match hash; sk- keys are typically variable length, but must be >= 3
+        if key_len == 64 and is_valid_api_key._hash_re.match(key):
             return True
-        if re.match(r"^[a-fA-F0-9]{64}$", key):
+        # If starts with sk-, use that regex, otherwise skip
+        elif key.startswith("sk-") and is_valid_api_key._sk_re.match(key):
             return True
     return False
 
