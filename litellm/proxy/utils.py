@@ -3546,10 +3546,12 @@ def _get_docs_url() -> Optional[str]:
     - If NO_DOCS is True, return None.
     - Otherwise, default to "/".
     """
-    if docs_url := os.getenv("DOCS_URL"):
+    docs_url = os.getenv("DOCS_URL")
+    if docs_url:
         return docs_url
 
-    if str_to_bool(os.getenv("NO_DOCS")) is True:
+    no_docs = os.getenv("NO_DOCS")
+    if str_to_bool(no_docs) is True:
         return None
 
     return "/"
