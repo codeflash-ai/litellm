@@ -97,6 +97,8 @@ from litellm.types.mcp import (
 )
 from litellm.types.utils import LLMResponseTypes, LoggedLiteLLMParams
 
+_sha256 = hashlib.sha256
+
 if TYPE_CHECKING:
     from opentelemetry.trace import Span as _Span
 
@@ -3136,12 +3138,8 @@ async def send_email(
 
 
 def hash_token(token: str):
-    import hashlib
-
     # Hash the string using SHA-256
-    hashed_token = hashlib.sha256(token.encode()).hexdigest()
-
-    return hashed_token
+    return _sha256(token.encode()).hexdigest()
 
 
 def _hash_token_if_needed(token: str) -> str:
