@@ -16,6 +16,10 @@ from litellm.secret_managers.get_azure_ad_token_provider import (
 )
 from litellm.types.secret_managers.main import KeyManagementSystem
 
+TRUE_VALUES = {"true"}
+
+FALSE_VALUES = {"false"}
+
 oidc_cache = DualCache()
 
 
@@ -40,14 +44,11 @@ def str_to_bool(value: Optional[str]) -> Optional[bool]:
     if value is None:
         return None
 
-    true_values = {"true"}
-    false_values = {"false"}
-
     value_lower = value.strip().lower()
 
-    if value_lower in true_values:
+    if value_lower in TRUE_VALUES:
         return True
-    elif value_lower in false_values:
+    elif value_lower in FALSE_VALUES:
         return False
     else:
         return None
