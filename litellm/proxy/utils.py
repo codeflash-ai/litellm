@@ -3666,7 +3666,7 @@ def get_server_root_path() -> str:
     - If SERVER_ROOT_PATH is set, return it.
     - Otherwise, default to "/".
     """
-    return os.getenv("SERVER_ROOT_PATH", "/")
+    return os.environ.get("SERVER_ROOT_PATH", "/")
 
 
 def get_prisma_client_or_throw(message: str):
