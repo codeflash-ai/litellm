@@ -207,10 +207,27 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         presence_penalty: Optional[float] = None,
         seed: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # avoid unnecessary locals() copy; set instance attributes directly for better efficiency
+        if temperature is not None:
+            self.temperature = temperature
+        if max_output_tokens is not None:
+            self.max_output_tokens = max_output_tokens
+        if top_p is not None:
+            self.top_p = top_p
+        if top_k is not None:
+            self.top_k = top_k
+        if response_mime_type is not None:
+            self.response_mime_type = response_mime_type
+        if candidate_count is not None:
+            self.candidate_count = candidate_count
+        if stop_sequences is not None:
+            self.stop_sequences = stop_sequences
+        if frequency_penalty is not None:
+            self.frequency_penalty = frequency_penalty
+        if presence_penalty is not None:
+            self.presence_penalty = presence_penalty
+        if seed is not None:
+            self.seed = seed
 
     @classmethod
     def get_config(cls):
@@ -573,7 +590,8 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
 
     @staticmethod
     def _is_thinking_budget_zero(thinking_budget: Optional[int]) -> bool:
-        return thinking_budget is not None and thinking_budget == 0
+        # No change: a single comparison, already optimal.
+        return thinking_budget == 0
 
     @staticmethod
     def _map_thinking_param(
