@@ -27,6 +27,8 @@ else:
     PassThroughEndpointLogging = Any
     EndpointType = Any
 
+_MODEL_URL_PATTERN = re.compile(r"/models/([^:]+)")
+
 
 class VertexPassthroughLoggingHandler:
     @staticmethod
@@ -318,8 +320,7 @@ class VertexPassthroughLoggingHandler:
 
     @staticmethod
     def extract_model_from_url(url: str) -> str:
-        pattern = r"/models/([^:]+)"
-        match = re.search(pattern, url)
+        match = _MODEL_URL_PATTERN.search(url)
         if match:
             return match.group(1)
         return "unknown"
