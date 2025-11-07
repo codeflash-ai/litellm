@@ -16,30 +16,31 @@ def extract_sql_commands(diff_output: str) -> List[str]:
         List[str]: A list of SQL commands extracted from the diff output.
     """
     # Split the output into lines and remove empty lines
-    lines = [line.strip() for line in diff_output.split("\n") if line.strip()]
+    lines = diff_output.split("\n")
 
-    sql_commands = []
-    current_command = ""
+    sql_commands: List[str] = []
+    buffer: List[str] = []
     in_sql_block = False
 
-    for line in lines:
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
         if line.startswith("-- "):  # Comment line, likely a table operation description
-            if in_sql_block and current_command:
-                sql_commands.append(current_command.strip())
-                current_command = ""
+            if in_sql_block and buffer:
+                sql_commands.append(" ".join(buffer).strip())
+                buffer.clear()
             in_sql_block = True
         elif in_sql_block:
+            buffer.append(line)
             if line.endswith(";"):
-                current_command += line
-                sql_commands.append(current_command.strip())
-                current_command = ""
+                sql_commands.append(" ".join(buffer).strip())
+                buffer.clear()
                 in_sql_block = False
-            else:
-                current_command += line + " "
 
     # Add any remaining command
-    if current_command:
-        sql_commands.append(current_command.strip())
+    if buffer:
+        sql_commands.append(" ".join(buffer).strip())
 
     return sql_commands
 
