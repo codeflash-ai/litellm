@@ -16,22 +16,27 @@ def extract_sql_commands(diff_output: str) -> List[str]:
         List[str]: A list of SQL commands extracted from the diff output.
     """
     # Split the output into lines and remove empty lines
-    lines = [line.strip() for line in diff_output.split("\n") if line.strip()]
+    # Optimization: use generator expressions and local variable lookups for performance
+    lines = (line.strip() for line in diff_output.split("\n"))
+    sql_commands: List[str] = []
+    current_command: str = ""
+    in_sql_block: bool = False
 
-    sql_commands = []
-    current_command = ""
-    in_sql_block = False
+    append = sql_commands.append  # Local name for faster access
 
     for line in lines:
+        # Skip empty lines in a single fast check
+        if not line:
+            continue
         if line.startswith("-- "):  # Comment line, likely a table operation description
             if in_sql_block and current_command:
-                sql_commands.append(current_command.strip())
+                append(current_command.strip())
                 current_command = ""
             in_sql_block = True
         elif in_sql_block:
             if line.endswith(";"):
                 current_command += line
-                sql_commands.append(current_command.strip())
+                append(current_command.strip())
                 current_command = ""
                 in_sql_block = False
             else:
@@ -39,7 +44,7 @@ def extract_sql_commands(diff_output: str) -> List[str]:
 
     # Add any remaining command
     if current_command:
-        sql_commands.append(current_command.strip())
+        append(current_command.strip())
 
     return sql_commands
 
@@ -57,7 +62,7 @@ def check_prisma_schema_diff_helper(db_url: str) -> Tuple[bool, List[str]]:
     verbose_logger.debug("Checking for Prisma schema diff...")  # noqa: T201
     try:
         result = subprocess.run(
-            [
+            (
                 "prisma",
                 "migrate",
                 "diff",
@@ -66,7 +71,7 @@ def check_prisma_schema_diff_helper(db_url: str) -> Tuple[bool, List[str]]:
                 "--to-schema-datamodel",
                 "./schema.prisma",
                 "--script",
-            ],
+            ),
             capture_output=True,
             text=True,
             check=True,
@@ -78,8 +83,8 @@ def check_prisma_schema_diff_helper(db_url: str) -> Tuple[bool, List[str]]:
         if sql_commands:
             print("Changes to DB Schema detected")  # noqa: T201
             print("Required SQL commands:")  # noqa: T201
-            for command in sql_commands:
-                print(command)  # noqa: T201
+            # Optimization: use '\n'.join instead of many print() calls
+            print("\n".join(sql_commands))  # noqa: T201
             return True, sql_commands
         else:
             return False, []
