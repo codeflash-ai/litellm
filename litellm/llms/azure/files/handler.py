@@ -199,7 +199,7 @@ class AzureOpenAIFilesAPI(BaseAzureLLM):
         openai_client: Optional[
             Union[AzureOpenAI, AsyncAzureOpenAI]
         ] = self.get_azure_openai_client(
-            litellm_params=litellm_params or {},
+            litellm_params=litellm_params,
             api_key=api_key,
             api_base=api_base,
             api_version=api_version,
