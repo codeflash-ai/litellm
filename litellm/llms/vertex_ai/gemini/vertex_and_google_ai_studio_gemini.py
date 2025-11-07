@@ -323,11 +323,10 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                 retrieval_config["languageCode"] = language_code
         
         # Remove location fields from tool definition
-        cleaned_config = {
-            k: v
-            for k, v in google_maps_config.items()
-            if k not in ["latitude", "longitude", "languageCode"]
-        }
+        cleaned_config = google_maps_config.copy()
+        cleaned_config.pop("latitude", None)
+        cleaned_config.pop("longitude", None)
+        cleaned_config.pop("languageCode", None)
     
         return cleaned_config, retrieval_config
     
