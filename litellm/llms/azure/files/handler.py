@@ -29,10 +29,15 @@ class AzureOpenAIFilesAPI(BaseAzureLLM):
         create_file_data: CreateFileRequest,
         openai_client: AsyncAzureOpenAI,
     ) -> OpenAIFileObject:
-        verbose_logger.debug("create_file_data=%s", create_file_data)
+        # Avoid formatting the log message string unless debugging is enabled, saving time on each method call
+        if verbose_logger.isEnabledFor(10):  # 10 == DEBUG
+            verbose_logger.debug("create_file_data=%s", create_file_data)
         response = await openai_client.files.create(**create_file_data)
-        verbose_logger.debug("create_file_response=%s", response)
-        return OpenAIFileObject(**response.model_dump())
+        if verbose_logger.isEnabledFor(10):  # 10 == DEBUG
+            verbose_logger.debug("create_file_response=%s", response)
+        # Store the results of model_dump before constructing OpenAIFileObject
+        model_dump = response.model_dump()
+        return OpenAIFileObject(**model_dump)
 
     def create_file(
         self,
