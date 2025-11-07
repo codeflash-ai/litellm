@@ -207,10 +207,28 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         presence_penalty: Optional[float] = None,
         seed: Optional[int] = None,
     ) -> None:
-        locals_ = locals().copy()
-        for key, value in locals_.items():
-            if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+        # Avoid creating and copying the entire locals dict
+        # Only set attributes provided as non-None at initialization time, directly on instance
+        if temperature is not None:
+            self.temperature = temperature
+        if max_output_tokens is not None:
+            self.max_output_tokens = max_output_tokens
+        if top_p is not None:
+            self.top_p = top_p
+        if top_k is not None:
+            self.top_k = top_k
+        if response_mime_type is not None:
+            self.response_mime_type = response_mime_type
+        if candidate_count is not None:
+            self.candidate_count = candidate_count
+        if stop_sequences is not None:
+            self.stop_sequences = stop_sequences
+        if frequency_penalty is not None:
+            self.frequency_penalty = frequency_penalty
+        if presence_penalty is not None:
+            self.presence_penalty = presence_penalty
+        if seed is not None:
+            self.seed = seed
 
     @classmethod
     def get_config(cls):
@@ -346,18 +364,25 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         Returns:
             Optional[dict]: The tool value if found, None otherwise
         """
-        # Convert camelCase to underscore_case
-        underscore_name = "".join(
-            ["_" + c.lower() if c.isupper() else c for c in tool_name]
-        ).lstrip("_")
-        # Try both camelCase and underscore_case variants
+        # Convert camelCase directly to underscore_case (more efficiently)
+        # Avoid redundant get() operations and avoid double dictionary traversal
+        # Only call get once for each key
+        underscore_chars = []
+        for c in tool_name:
+            if c.isupper():
+                underscore_chars.append('_')
+                underscore_chars.append(c.lower())
+            else:
+                underscore_chars.append(c)
+        underscore_name = ''.join(underscore_chars).lstrip('_')
 
-        if tool.get(tool_name) is not None:
-            return tool.get(tool_name)
-        elif tool.get(underscore_name) is not None:
-            return tool.get(underscore_name)
-        else:
-            return None
+        value = tool.get(tool_name)
+        if value is not None:
+            return value
+        value = tool.get(underscore_name)
+        if value is not None:
+            return value
+        return None
 
     def _map_function( # noqa: PLR0915
         self, value: List[dict], optional_params: dict
