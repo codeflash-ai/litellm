@@ -210,7 +210,7 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         locals_ = locals().copy()
         for key, value in locals_.items():
             if key != "self" and value is not None:
-                setattr(self.__class__, key, value)
+                setattr(self, key, value)
 
     @classmethod
     def get_config(cls):
@@ -635,10 +635,7 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         }
         """
         from litellm.types.llms.vertex_ai import (
-            PrebuiltVoiceConfig,
-            SpeechConfig,
-            VoiceConfig,
-        )
+                                                  SpeechConfig)
 
         # Validate audio format - Gemini TTS only supports pcm16
         audio_format = value.get("format")
@@ -649,15 +646,16 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
                 f"Please set audio format to 'pcm16'."
             )
 
-        # Map OpenAI audio parameter to Gemini speech config
-        speech_config: SpeechConfig = {}
-
         if "voice" in value:
-            prebuilt_voice_config: PrebuiltVoiceConfig = {"voiceName": value["voice"]}
-            voice_config: VoiceConfig = {"prebuiltVoiceConfig": prebuilt_voice_config}
-            speech_config["voiceConfig"] = voice_config
-
-        return cast(dict, speech_config)
+            speech_config: SpeechConfig = {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {"voiceName": value["voice"]}
+                }
+            }
+            return cast(dict, speech_config)
+        else:
+            speech_config: SpeechConfig = {}
+            return cast(dict, speech_config)
 
     def map_openai_params(  # noqa: PLR0915
         self,
