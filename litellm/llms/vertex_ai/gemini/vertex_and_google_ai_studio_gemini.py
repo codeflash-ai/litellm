@@ -579,16 +579,18 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
     def _map_thinking_param(
         thinking_param: AnthropicThinkingParam,
     ) -> GeminiThinkingConfig:
-        thinking_enabled = thinking_param.get("type") == "enabled"
-        thinking_budget = thinking_param.get("budget_tokens")
+        # Fast local lookups instead of repeated .get
+        t_type = thinking_param.get("type")
+        t_budget = thinking_param.get("budget_tokens")
 
         params: GeminiThinkingConfig = {}
-        if thinking_enabled and not VertexGeminiConfig._is_thinking_budget_zero(
-            thinking_budget
-        ):
+        thinking_enabled = t_type == "enabled"
+
+        # Avoid calling static method with all args if not required
+        if thinking_enabled and not (t_budget is not None and t_budget == 0):
             params["includeThoughts"] = True
-        if thinking_budget is not None and isinstance(thinking_budget, int):
-            params["thinkingBudget"] = thinking_budget
+        if t_budget is not None and isinstance(t_budget, int):
+            params["thinkingBudget"] = t_budget
         return params
 
     def map_response_modalities(self, value: list) -> list:
