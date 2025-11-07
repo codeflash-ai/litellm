@@ -14,6 +14,8 @@ from litellm.types.llms.openai import AllMessageValues
 from litellm.types.llms.vertex_ai import PartType, Schema
 from litellm.types.utils import TokenCountResponse
 
+_VALID_SCHEMA_FIELDS = set(get_type_hints(Schema).keys())
+
 
 class VertexAIError(BaseLLMException):
     def __init__(
@@ -282,13 +284,18 @@ def _build_vertex_schema(parameters: dict, add_property_ordering: bool = False):
     Returns:
         parameters: dict - the input parameters, modified in place
     """
-    # Get valid fields from Schema TypedDict
-    valid_schema_fields = set(get_type_hints(Schema).keys())
+    # Use cached fields (avoids repeated recomputation)
+    valid_schema_fields = _VALID_SCHEMA_FIELDS
 
-    defs = parameters.pop("$defs", {})
-    # flatten the defs
-    for name, value in defs.items():
-        unpack_defs(value, defs)
+    # Only pop "$defs" if present, avoiding unnecessary mutation
+    defs = parameters.pop("$defs", None)
+    if defs:
+        # flatten the defs
+        for name, value in defs.items():
+            unpack_defs(value, defs)
+    else:
+        defs = {}
+
     unpack_defs(parameters, defs)
 
     # 5. Nullable fields:
