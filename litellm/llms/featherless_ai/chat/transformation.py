@@ -74,7 +74,7 @@ class FeatherlessAIConfig(OpenAIGPTConfig):
         model: str,
         drop_params: bool,
     ) -> dict:
-        supported_openai_params = self.get_supported_openai_params(model=model)
+        supported_openai_params = set(self.get_supported_openai_params(model=model))
         for param, value in non_default_params.items():
             if param == "tool_choice" or param == "tools":
                 if param == "tool_choice" and (value == "auto" or value == "none"):
@@ -101,11 +101,7 @@ class FeatherlessAIConfig(OpenAIGPTConfig):
         self, api_base: Optional[str], api_key: Optional[str]
     ) -> Tuple[Optional[str], Optional[str]]:
         # FeatherlessAI is openai compatible, set to custom_openai and use FeatherlessAI's endpoint
-        api_base = (
-            api_base
-            or get_secret_str("FEATHERLESS_API_BASE")
-            or "https://api.featherless.ai/v1"
-        )
+        api_base = api_base or get_secret_str("FEATHERLESS_API_BASE") or "https://api.featherless.ai/v1"
         dynamic_api_key = api_key or get_secret_str("FEATHERLESS_API_KEY")
         return api_base, dynamic_api_key
 
