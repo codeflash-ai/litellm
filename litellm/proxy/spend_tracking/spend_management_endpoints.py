@@ -1,5 +1,4 @@
 #### SPEND MANAGEMENT #####
-import collections
 import os
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -16,7 +15,7 @@ from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 from litellm.proxy.spend_tracking.spend_tracking_utils import (
     get_spend_by_team_and_customer,
 )
-from litellm.proxy.utils import handle_exception_on_proxy
+from litellm.proxy.utils import PrismaClient, handle_exception_on_proxy
 from litellm.router_strategy.budget_limiter import RouterBudgetLimiting
 
 if TYPE_CHECKING:
@@ -2852,8 +2851,6 @@ async def ui_get_spend_by_tags(
 
     if prisma_client is None:
         raise HTTPException(status_code=500, detail={"error": "No db connected"})
-
-    response = None
     if tags_list is None or (isinstance(tags_list, list) and "all-tags" in tags_list):
         # Get spend for all tags
         sql_query = """
@@ -2871,6 +2868,18 @@ async def ui_get_spend_by_tags(
             start_date,
             end_date,
         )
+        # Post-process rows for aggregation
+        total_spend_per_tag: dict[str, float] = {}
+        total_requests_per_tag: dict[str, int] = {}
+
+        for row in response:
+            tag_name = row["individual_request_tag"]
+            tag_spend = row["total_spend"]
+            tag_log_count = row["log_count"]
+            # Avoid defaultdict overhead, use setdefault at most once per key
+            total_spend_per_tag[tag_name] = total_spend_per_tag.get(tag_name, 0.0) + tag_spend
+            total_requests_per_tag[tag_name] = total_requests_per_tag.get(tag_name, 0) + tag_log_count
+
     else:
         # filter by tags list
         sql_query = """
@@ -2890,18 +2899,20 @@ async def ui_get_spend_by_tags(
             end_date,
             tags_list,
         )
+        # response already aggregated, one row per tag
+        total_spend_per_tag: dict[str, float] = {}
+        total_requests_per_tag: dict[str, int] = {}
 
-    # print("tags - spend")
-    # print(response)
-    # Bar Chart 1 - Spend per tag - Top 10 tags by spend
-    total_spend_per_tag: collections.defaultdict = collections.defaultdict(float)
-    total_requests_per_tag: collections.defaultdict = collections.defaultdict(int)
-    for row in response:
-        tag_name = row["individual_request_tag"]
-        tag_spend = row["total_spend"]
+        # No need for defaultdict or +=, just direct assignment
+        for row in response:
+            tag_name = row["individual_request_tag"]
+            tag_spend = row["total_spend"]
+            tag_log_count = row["log_count"]
+            total_spend_per_tag[tag_name] = tag_spend
+            total_requests_per_tag[tag_name] = tag_log_count
 
-        total_spend_per_tag[tag_name] += tag_spend
-        total_requests_per_tag[tag_name] += row["log_count"]
+    # Sorting step
+    # Using .items() then sorted; dict for lower overhead vs. defaultdict
 
     sorted_tags = sorted(total_spend_per_tag.items(), key=lambda x: x[1], reverse=True)
     # convert to ui format
