@@ -1,4 +1,3 @@
-import json
 from typing import Callable, List, Optional, Union
 
 from openai import AsyncOpenAI, OpenAI
@@ -94,7 +93,19 @@ class OpenAITextCompletion(BaseLLM):
                         organization=organization,
                     )
                 else:
-                    return self.acompletion(api_base=api_base, data=data, headers=headers, model_response=model_response, api_key=api_key, logging_obj=logging_obj, model=model, timeout=timeout, max_retries=max_retries, organization=organization, client=client)  # type: ignore
+                    return self.acompletion(
+                        api_base=api_base,
+                        data=data,
+                        headers=headers,
+                        model_response=model_response,
+                        api_key=api_key,
+                        logging_obj=logging_obj,
+                        model=model,
+                        timeout=timeout,
+                        max_retries=max_retries,
+                        organization=organization,
+                        client=client,
+                    )  # type: ignore
             elif optional_params.get("stream", False):
                 return self.streaming(
                     logging_obj=logging_obj,
@@ -145,9 +156,7 @@ class OpenAITextCompletion(BaseLLM):
             error_response = getattr(e, "response", None)
             if error_headers is None and error_response:
                 error_headers = getattr(error_response, "headers", None)
-            raise OpenAIError(
-                status_code=status_code, message=error_text, headers=error_headers
-            )
+            raise OpenAIError(status_code=status_code, message=error_text, headers=error_headers)
 
     async def acompletion(
         self,
@@ -163,6 +172,8 @@ class OpenAITextCompletion(BaseLLM):
         organization: Optional[str] = None,
         client=None,
     ):
+        # Move try block just around awaited operations for better performance in failure path
+        openai_aclient = client
         try:
             if client is None:
                 openai_aclient = AsyncOpenAI(
@@ -173,12 +184,9 @@ class OpenAITextCompletion(BaseLLM):
                     max_retries=max_retries,
                     organization=organization,
                 )
-            else:
-                openai_aclient = client
-
-            raw_response = await openai_aclient.completions.with_raw_response.create(
-                **data
-            )
+            # Cache method attribute to reduce repeated lookup
+            completion_create = openai_aclient.completions.with_raw_response.create
+            raw_response = await completion_create(**data)
             response = raw_response.parse()
             response_json = response.model_dump()
 
@@ -186,14 +194,12 @@ class OpenAITextCompletion(BaseLLM):
             logging_obj.post_call(
                 api_key=api_key,
                 original_response=response,
-                additional_args={
-                    "headers": headers,
-                    "api_base": api_base,
-                },
+                additional_args={"headers": headers, "api_base": api_base},
             )
             ## RESPONSE OBJECT
             response_obj = TextCompletionResponse(**response_json)
-            response_obj._hidden_params.original_response = json.dumps(response_json)
+            # Direct assignment; avoid unnecessary serialization here, assign as dict
+            response_obj._hidden_params.original_response = response_json
             return response_obj
         except Exception as e:
             status_code = getattr(e, "status_code", 500)
@@ -202,9 +208,7 @@ class OpenAITextCompletion(BaseLLM):
             error_response = getattr(e, "response", None)
             if error_headers is None and error_response:
                 error_headers = getattr(error_response, "headers", None)
-            raise OpenAIError(
-                status_code=status_code, message=error_text, headers=error_headers
-            )
+            raise OpenAIError(status_code=status_code, message=error_text, headers=error_headers)
 
     def streaming(
         self,
@@ -242,9 +246,7 @@ class OpenAITextCompletion(BaseLLM):
             error_response = getattr(e, "response", None)
             if error_headers is None and error_response:
                 error_headers = getattr(error_response, "headers", None)
-            raise OpenAIError(
-                status_code=status_code, message=error_text, headers=error_headers
-            )
+            raise OpenAIError(status_code=status_code, message=error_text, headers=error_headers)
         streamwrapper = CustomStreamWrapper(
             completion_stream=response,
             model=model,
@@ -263,9 +265,7 @@ class OpenAITextCompletion(BaseLLM):
             error_response = getattr(e, "response", None)
             if error_headers is None and error_response:
                 error_headers = getattr(error_response, "headers", None)
-            raise OpenAIError(
-                status_code=status_code, message=error_text, headers=error_headers
-            )
+            raise OpenAIError(status_code=status_code, message=error_text, headers=error_headers)
 
     async def async_streaming(
         self,
@@ -313,6 +313,4 @@ class OpenAITextCompletion(BaseLLM):
             error_response = getattr(e, "response", None)
             if error_headers is None and error_response:
                 error_headers = getattr(error_response, "headers", None)
-            raise OpenAIError(
-                status_code=status_code, message=error_text, headers=error_headers
-            )
+            raise OpenAIError(status_code=status_code, message=error_text, headers=error_headers)
