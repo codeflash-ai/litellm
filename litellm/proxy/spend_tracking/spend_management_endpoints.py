@@ -2584,11 +2584,7 @@ async def global_view_all_end_users():
     if db_response is None:
         return []
 
-    _end_users = []
-    for row in db_response:
-        _end_users.append(row["end_user"])
-
-    return {"end_users": _end_users}
+    return {"end_users": [row["end_user"] for row in db_response]}
 
 
 @router.post(
