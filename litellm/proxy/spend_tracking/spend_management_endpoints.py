@@ -1292,12 +1292,11 @@ async def global_get_all_tag_names():
         """
 
         db_response = await prisma_client.db.query_raw(sql_query)
-        if db_response is None:
-            return []
+        if not db_response:
+            return {"tag_names": []}
 
-        _tag_names = []
-        for row in db_response:
-            _tag_names.append(row.get("individual_request_tag"))
+        # Use a list comprehension for faster construction
+        _tag_names = [row.get("individual_request_tag") for row in db_response]
 
         return {"tag_names": _tag_names}
 
