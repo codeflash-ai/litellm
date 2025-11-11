@@ -21,9 +21,7 @@ class OpenAIGuardrailBase:
         ]
         get_user_prompt(messages) -> "What is the weather in Tokyo?"
         """
-        from litellm.litellm_core_utils.prompt_templates.common_utils import (
-            convert_content_list_to_str,
-        )
+        from litellm.litellm_core_utils.prompt_templates.common_utils import convert_content_list_to_str
 
         if not messages:
             return None
@@ -43,10 +41,12 @@ class OpenAIGuardrailBase:
         # Reverse to get the messages in chronological order
         user_messages.reverse()
 
-        user_prompt = ""
+        # Efficient string accumulation
+        texts = []
         for message in user_messages:
             text_content = convert_content_list_to_str(message)
-            user_prompt += text_content + "\n"
+            texts.append(text_content)
+        user_prompt = "\n".join(texts)
 
         result = user_prompt.strip()
-        return result if result else None 
+        return result if result else None
