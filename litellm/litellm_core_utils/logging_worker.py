@@ -92,9 +92,11 @@ class LoggingWorker:
             # Capture the current context when enqueueing
             task = LoggingTask(coroutine=coroutine, context=contextvars.copy_context())
             self._queue.put_nowait(task)
-        except asyncio.QueueFull as e:
-            verbose_logger.exception(f"LoggingWorker queue is full: {e}")
-            # Drop logs on overload to protect request throughput
+        except asyncio.QueueFull:
+            # HOT PATH: Replace verbose_logger.exception(f"LoggingWorker queue is full: {e}")
+            # with a lightweight overflow counter
+            # to avoid extremely costly synchronous logging.
+            self._increment_overflow()
             pass
 
     def ensure_initialized_and_enqueue(self, async_coroutine: Coroutine):
@@ -130,10 +132,7 @@ class LoggingWorker:
 
         for _ in range(self.MAX_ITERATIONS_TO_CLEAR_QUEUE):
             # Check if we've exceeded the maximum time
-            if (
-                asyncio.get_event_loop().time() - start_time
-                >= self.MAX_TIME_TO_CLEAR_QUEUE
-            ):
+            if asyncio.get_event_loop().time() - start_time >= self.MAX_TIME_TO_CLEAR_QUEUE:
                 verbose_logger.warning(
                     f"clear_queue exceeded max_time of {self.MAX_TIME_TO_CLEAR_QUEUE}s, stopping early"
                 )
@@ -153,6 +152,23 @@ class LoggingWorker:
                 self._queue.task_done()  # If you're using join() elsewhere
             except asyncio.QueueEmpty:
                 break
+
+    def _increment_overflow(self) -> None:
+        """
+        Lightweight overflow counter to avoid slow exception logging on hot path.
+        When overflow count reaches 1000, log ONCE per 1000 drops.
+        """
+        # Only add this attribute on first overflow
+        if not hasattr(self, "_overflow_count"):
+            self._overflow_count = 1
+        else:
+            self._overflow_count += 1
+        if self._overflow_count >= 1000:
+            try:
+                verbose_logger.exception("LoggingWorker queue is full: dropped 1000+ logs since last warning")
+            except Exception:
+                pass  # Do not allow logging failures to propagate
+            self._overflow_count = 0
 
 
 # Global instance for backward compatibility
