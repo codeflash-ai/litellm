@@ -1977,25 +1977,36 @@ def _can_object_call_vector_stores(
     """
     Raises ProxyException if the object (key, team, org) cannot access the specific vector store.
     """
-    if object_permissions is None:
-        return True
-
-    if object_permissions.vector_stores is None:
+    if object_permissions is None or object_permissions.vector_stores is None:
         return True
 
     # If length is 0, then the object has access to all vector stores.
-    if len(object_permissions.vector_stores) == 0:
+    vec_stores = object_permissions.vector_stores
+    if not vec_stores:  # this checks for both None and empty list, but None is already checked above
         return True
 
-    for vector_store_id in vector_store_ids_to_run:
-        if vector_store_id not in object_permissions.vector_stores:
-            raise ProxyException(
-                message=f"User not allowed to access vector store. Tried to access {vector_store_id}. Only allowed to access {object_permissions.vector_stores}",
-                type=ProxyErrorTypes.get_vector_store_access_error_type_for_object(
-                    object_type
-                ),
-                param="vector_store",
-                code=status.HTTP_401_UNAUTHORIZED,
-            )
-
+    # Convert vector_stores to a set for O(1) lookup if more than a few to save time on repeated 'in'
+    if len(vec_stores) > 16 and len(vector_store_ids_to_run) > 1:
+        allowed_ids = set(vec_stores)
+        for vector_store_id in vector_store_ids_to_run:
+            if vector_store_id not in allowed_ids:
+                raise ProxyException(
+                    message=f"User not allowed to access vector store. Tried to access {vector_store_id}. Only allowed to access {object_permissions.vector_stores}",
+                    type=ProxyErrorTypes.get_vector_store_access_error_type_for_object(
+                        object_type
+                    ),
+                    param="vector_store",
+                    code=status.HTTP_401_UNAUTHORIZED,
+                )
+    else:
+        for vector_store_id in vector_store_ids_to_run:
+            if vector_store_id not in vec_stores:
+                raise ProxyException(
+                    message=f"User not allowed to access vector store. Tried to access {vector_store_id}. Only allowed to access {object_permissions.vector_stores}",
+                    type=ProxyErrorTypes.get_vector_store_access_error_type_for_object(
+                        object_type
+                    ),
+                    param="vector_store",
+                    code=status.HTTP_401_UNAUTHORIZED,
+                )
     return True
