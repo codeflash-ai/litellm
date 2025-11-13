@@ -3,6 +3,7 @@ import os
 from typing import Literal, Optional
 
 from litellm._logging import verbose_proxy_logger
+from functools import lru_cache
 
 
 def _get_salt_key():
@@ -41,7 +42,7 @@ def decrypt_value_helper(
     exception_type: Literal["debug", "error"] = "error",
     return_original_value: bool = False,
 ):
-    signing_key = _get_salt_key()
+    signing_key = _cached_get_salt_key()
 
     try:
         if isinstance(value, str):
@@ -52,15 +53,12 @@ def decrypt_value_helper(
         # if it's not str - do not decrypt it, return the value
         return value
     except Exception as e:
-
         error_message = f"Error decrypting value for key: {key}, Did your master_key/salt key change recently? \nError: {str(e)}\nSet permanent salt key - https://docs.litellm.ai/docs/proxy/prod#5-set-litellm-salt-key"
         if exception_type == "debug":
             verbose_proxy_logger.debug(error_message)
             return value if return_original_value else None
 
-        verbose_proxy_logger.debug(
-            f"Unable to decrypt value={value} for key: {key}, returning None"
-        )
+        verbose_proxy_logger.debug(f"Unable to decrypt value={value} for key: {key}, returning None")
         if return_original_value:
             return value
         else:
@@ -113,3 +111,8 @@ def decrypt_value(value: bytes, signing_key: str) -> str:
         return plaintext  # type: ignore
     except Exception as e:
         raise e
+
+
+@lru_cache(maxsize=1)
+def _cached_get_salt_key():
+    return _get_salt_key()
