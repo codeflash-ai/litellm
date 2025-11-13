@@ -61,8 +61,8 @@ class RedisUpdateBuffer:
         """
         from litellm.proxy.proxy_server import general_settings
 
-        _use_redis_transaction_buffer: Optional[Union[bool, str]] = (
-            general_settings.get("use_redis_transaction_buffer", False)
+        _use_redis_transaction_buffer: Optional[Union[bool, str]] = general_settings.get(
+            "use_redis_transaction_buffer", False
         )
         if isinstance(_use_redis_transaction_buffer, str):
             _use_redis_transaction_buffer = str_to_bool(_use_redis_transaction_buffer)
@@ -151,15 +151,11 @@ class RedisUpdateBuffer:
                 ```
         """
         if self.redis_cache is None:
-            verbose_proxy_logger.debug(
-                "redis_cache is None, skipping store_in_memory_spend_updates_in_redis"
-            )
+            verbose_proxy_logger.debug("redis_cache is None, skipping store_in_memory_spend_updates_in_redis")
             return
 
         # Get all transactions
-        db_spend_update_transactions = (
-            await spend_update_queue.flush_and_get_aggregated_db_spend_update_transactions()
-        )
+        db_spend_update_transactions = await spend_update_queue.flush_and_get_aggregated_db_spend_update_transactions()
         daily_spend_update_transactions = (
             await daily_spend_update_queue.flush_and_get_aggregated_daily_spend_update_transactions()
         )
@@ -170,12 +166,8 @@ class RedisUpdateBuffer:
             await daily_tag_spend_update_queue.flush_and_get_aggregated_daily_spend_update_transactions()
         )
 
-        verbose_proxy_logger.debug(
-            "ALL DB SPEND UPDATE TRANSACTIONS: %s", db_spend_update_transactions
-        )
-        verbose_proxy_logger.debug(
-            "ALL DAILY SPEND UPDATE TRANSACTIONS: %s", daily_spend_update_transactions
-        )
+        verbose_proxy_logger.debug("ALL DB SPEND UPDATE TRANSACTIONS: %s", db_spend_update_transactions)
+        verbose_proxy_logger.debug("ALL DAILY SPEND UPDATE TRANSACTIONS: %s", daily_spend_update_transactions)
 
         await self._store_transactions_in_redis(
             transactions=db_spend_update_transactions,
@@ -295,9 +287,7 @@ class RedisUpdateBuffer:
         )
         if list_of_transactions is None:
             return None
-        list_of_daily_spend_update_transactions = [
-            json.loads(transaction) for transaction in list_of_transactions
-        ]
+        list_of_daily_spend_update_transactions = [json.loads(transaction) for transaction in list_of_transactions]
         return cast(
             Dict[str, DailyUserSpendTransaction],
             DailySpendUpdateQueue.get_aggregated_daily_spend_update_transactions(
@@ -319,9 +309,7 @@ class RedisUpdateBuffer:
         )
         if list_of_transactions is None:
             return None
-        list_of_daily_spend_update_transactions = [
-            json.loads(transaction) for transaction in list_of_transactions
-        ]
+        list_of_daily_spend_update_transactions = [json.loads(transaction) for transaction in list_of_transactions]
         return cast(
             Dict[str, DailyTeamSpendTransaction],
             DailySpendUpdateQueue.get_aggregated_daily_spend_update_transactions(
@@ -343,9 +331,7 @@ class RedisUpdateBuffer:
         )
         if list_of_transactions is None:
             return None
-        list_of_daily_spend_update_transactions = [
-            json.loads(transaction) for transaction in list_of_transactions
-        ]
+        list_of_daily_spend_update_transactions = [json.loads(transaction) for transaction in list_of_transactions]
         return cast(
             Dict[str, DailyTagSpendTransaction],
             DailySpendUpdateQueue.get_aggregated_daily_spend_update_transactions(
@@ -372,19 +358,9 @@ class RedisUpdateBuffer:
         """
         Combines the list of transactions into a single DBSpendUpdateTransactions object
         """
-        # Initialize a new combined transaction object with empty dictionaries
-        combined_transaction = DBSpendUpdateTransactions(
-            user_list_transactions={},
-            end_user_list_transactions={},
-            key_list_transactions={},
-            team_list_transactions={},
-            team_member_list_transactions={},
-            org_list_transactions={},
-            tag_list_transactions={},
-        )
 
-        # Define the transaction fields to process
-        transaction_fields = [
+        # Initialize new dicts to accumulate results, reducing attribute lookups
+        field_names = [
             "user_list_transactions",
             "end_user_list_transactions",
             "key_list_transactions",
@@ -395,16 +371,20 @@ class RedisUpdateBuffer:
         ]
 
         # Loop through each transaction and combine the values
-        for transaction in list_of_transactions:
-            # Process each field type
-            for field in transaction_fields:
-                if transaction.get(field):
-                    for entity_id, amount in transaction[field].items():  # type: ignore
-                        combined_transaction[field][entity_id] = (  # type: ignore
-                            combined_transaction[field].get(entity_id, 0) + amount  # type: ignore
-                        )
+        combined_data = {field: {} for field in field_names}
 
-        return combined_transaction
+        # Fast attribute access via .get and built-in dicts
+        for transaction in list_of_transactions:
+            for field in field_names:
+                trans_dict = transaction.get(field)
+                if trans_dict:
+                    combined_dict = combined_data[field]
+                    for entity_id, amount in trans_dict.items():
+                        # Use setdefault for a single hash lookup instead of get + assignment
+                        combined_dict[entity_id] = combined_dict.get(entity_id, 0) + amount
+
+        # Construct and return combined transaction object with the gathered dicts
+        return DBSpendUpdateTransactions(**combined_data)
 
     async def _emit_new_item_added_to_redis_buffer_event(
         self,
