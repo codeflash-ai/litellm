@@ -432,16 +432,27 @@ def allowed_route_check_inside_route(
 
 def get_actual_routes(allowed_routes: list) -> list:
     actual_routes: list = []
-    for route_name in allowed_routes:
-        try:
-            route_value = LiteLLMRoutes[route_name].value
-            if isinstance(route_value, set):
-                actual_routes.extend(list(route_value))
-            else:
-                actual_routes.extend(route_value)
 
-        except KeyError:
-            actual_routes.append(route_name)
+    # Convert allowed_routes to tuple for __getitem__ lookup optimization only if it's large,
+    # but keep as-is for simplicity given behavioral preservation requirements.
+
+    # Cache LiteLLMRoutes keys to avoid repeated KeyError handling
+    routes_dict = LiteLLMRoutes.__members__  # maps names to Enum objects (never raises)
+    extend_actual_routes = actual_routes.extend
+    append_actual_routes = actual_routes.append
+
+    for route_name in allowed_routes:
+        route_enum = routes_dict.get(route_name)
+        if route_enum is not None:
+            value = route_enum.value
+            # Fast-path: Use extend, avoid list() call for set, always extend over append
+            # Set: convert to list before extending, but in Python, extend accepts any iterable
+            if isinstance(value, set):
+                extend_actual_routes(value)
+            else:
+                extend_actual_routes(value)
+        else:
+            append_actual_routes(route_name)
     return actual_routes
 
 
