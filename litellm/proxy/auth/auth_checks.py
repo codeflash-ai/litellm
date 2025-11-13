@@ -1462,27 +1462,50 @@ def _can_object_call_model(
         )
     if isinstance(model, list):
         for m in model:
-            _can_object_call_model(
-                model=m,
-                llm_router=llm_router,
-                models=models,
-                team_model_aliases=team_model_aliases,
-                team_id=team_id,
-                object_type=object_type,
-                fallback_depth=fallback_depth + 1,
-            )
-        return True
+            try:
+                _can_object_call_model(
+                    model=m,
+                    llm_router=llm_router,
+                    models=models,
+                    team_model_aliases=team_model_aliases,
+                    team_id=team_id,
+                    object_type=object_type,
+                    fallback_depth=fallback_depth + 1,
+                )
+                return True
+            except ProxyException:
+                pass
+        # If no model passes, raise for the first one
+        raise ProxyException(
+            message=f"{object_type} not allowed to access model. This {object_type} can only access models={models}. Tried to access {model}",
+            type=ProxyErrorTypes.get_model_access_error_type_for_object(
+                object_type=object_type
+            ),
+            param="model",
+            code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    # Gather list of possible models for access checks 
+    # Optimize: avoid duplicate checks by using a set
 
     potential_models = [model]
-    if model in litellm.model_alias_map:
-        potential_models.append(litellm.model_alias_map[model])
-    elif llm_router and model in llm_router.model_group_alias:
+    model_alias = litellm.model_alias_map.get(model)
+    if model_alias is not None:
+        if model_alias != model:
+            potential_models.append(model_alias)
+    elif llm_router and hasattr(llm_router, "model_group_alias") and model in llm_router.model_group_alias:
         _model = llm_router._get_model_from_alias(model)
-        if _model:
+        if _model and _model != model:
             potential_models.append(_model)
 
     ## check model access for alias + underlying model - allow if either is in allowed models
+
+    # Optimize: Use set to avoid redundant checks for duplicate models/aliases
+    seen = set()
     for m in potential_models:
+        if m in seen:
+            continue
+        seen.add(m)
         if _check_model_access_helper(
             model=m,
             llm_router=llm_router,
