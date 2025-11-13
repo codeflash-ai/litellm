@@ -709,17 +709,21 @@ def _should_check_db(
     """
     Prevent calling db repeatedly for items that don't exist in the db.
     """
+    # Avoid multiple lookups and tuple unpacking by minimizing dictionary accesses
+    try:
+        value = last_db_access_time[key]
+    except KeyError:
+        return True
+
+    v0 = value[0]
+    if v0 is not None:
+        return True
+
+    # Only call time.time() if needed
+    # value is assumed to be [None, <timestamp>] or similar
     current_time = time.time()
-    # if key doesn't exist in last_db_access_time -> check db
-    if key not in last_db_access_time:
+    if current_time - value >= db_cache_expiry:
         return True
-    elif (
-        last_db_access_time[key][0] is not None
-    ):  # check db for non-null values (for refresh operations)
-        return True
-    elif last_db_access_time[key][0] is None:
-        if current_time - last_db_access_time[key] >= db_cache_expiry:
-            return True
     return False
 
 
