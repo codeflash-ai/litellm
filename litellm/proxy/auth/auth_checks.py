@@ -253,19 +253,13 @@ def _is_ui_route(
     """
     # this token is only used for managing the ui
     allowed_routes = LiteLLMRoutes.ui_routes.value
-    # check if the current route startswith any of the allowed routes
-    if (
-        route is not None
-        and isinstance(route, str)
-        and any(route.startswith(allowed_route) for allowed_route in allowed_routes)
-    ):
-        # Do something if the current route starts with any of the allowed routes
-        return True
-    elif any(
-        RouteChecks._route_matches_pattern(route=route, pattern=allowed_route)
-        for allowed_route in allowed_routes
-    ):
-        return True
+    # Combine both checks in a single loop for efficiency
+    if route is not None and isinstance(route, str):
+        for allowed_route in allowed_routes:
+            if route.startswith(allowed_route):
+                return True
+            elif RouteChecks._route_matches_pattern(route=route, pattern=allowed_route):
+                return True
     return False
 
 
