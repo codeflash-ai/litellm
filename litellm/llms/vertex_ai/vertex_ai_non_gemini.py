@@ -33,6 +33,7 @@ class TextStreamer:
 
     def __init__(self, text):
         self.text = text.split()  # let's assume words as a streaming unit
+        self._len = len(self.text)
         self.index = 0
 
     def __iter__(self):
@@ -50,9 +51,11 @@ class TextStreamer:
         return self
 
     async def __anext__(self):
-        if self.index < len(self.text):
-            result = self.text[self.index]
-            self.index += 1
+        idx = self.index
+        if idx < self._len:
+            # Avoid attribute lookups in hot path.
+            result = self.text[idx]
+            self.index = idx + 1
             return result
         else:
             raise StopAsyncIteration  # once we run out of data to stream, we raise this error
