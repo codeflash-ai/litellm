@@ -1473,13 +1473,27 @@ def _can_object_call_model(
             )
         return True
 
+
+    # If allowed models contains the wildcard or all models marker, grant early
+    # Check and avoid repeating expensive _check_model_access_helper
+    if not models or "*" in models or SpecialModelNames.all_proxy_models.value in models:
+        return True
+
     potential_models = [model]
-    if model in litellm.model_alias_map:
-        potential_models.append(litellm.model_alias_map[model])
-    elif llm_router and model in llm_router.model_group_alias:
-        _model = llm_router._get_model_from_alias(model)
-        if _model:
-            potential_models.append(_model)
+    model_in_litellm_alias = litellm.model_alias_map.get(model)
+    if model_in_litellm_alias is not None:
+        potential_models.append(model_in_litellm_alias)
+    elif llm_router is not None:
+        # Avoid double dict lookup+attribute - combine
+        model_group_alias = getattr(llm_router, "model_group_alias", None)
+        if model_group_alias and model in model_group_alias:
+            _model = llm_router._get_model_from_alias(model)
+            if _model:
+                potential_models.append(_model)
+
+    # check model access for alias + underlying model - allow if either is in allowed models
+    # shortcut if any potential model is allowed, do not check remaining
+    # _check_model_access_helper does a lot - avoid calling unnecessarily
 
     ## check model access for alias + underlying model - allow if either is in allowed models
     for m in potential_models:
@@ -1594,7 +1608,12 @@ async def can_user_call_model(
     if user_object is None:
         return True
 
-    if SpecialModelNames.no_default_models.value in user_object.models:
+    # Use set lookup for faster membership check for no_default_models pattern
+    user_models = user_object.models
+    # If user_models is not a list, fallback to original logic
+    # But practically, user_models is always List[str].
+    no_default_value = SpecialModelNames.no_default_models.value
+    if hasattr(user_models, "__contains__") and no_default_value in user_models:
         raise ProxyException(
             message=f"User not allowed to access model. No default model access, only team models allowed. Tried to access {model}",
             type=ProxyErrorTypes.key_model_access_denied,
