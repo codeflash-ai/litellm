@@ -11,7 +11,7 @@ Run checks for:
 import asyncio
 import re
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 from fastapi import Request, status
 from pydantic import BaseModel
@@ -45,7 +45,6 @@ from litellm.proxy._types import (
     NewTeamRequest,
     ProxyErrorTypes,
     ProxyException,
-    RoleBasedPermissions,
     SpecialModelNames,
     UserAPIKeyAuth,
 )
@@ -737,16 +736,18 @@ def _get_role_based_permissions(
     """
     Get the role based permissions from the general settings.
     """
-    role_based_permissions = cast(
-        Optional[List[RoleBasedPermissions]],
-        general_settings.get("role_permissions", []),
-    )
-    if role_based_permissions is None:
+    # Avoid casting to Optional[List[RoleBasedPermissions]], since we always want a list here
+    role_based_permissions = general_settings.get("role_permissions")
+    if not role_based_permissions:
         return None
 
-    for role_based_permission in role_based_permissions:
-        if role_based_permission.role == rbac_role:
-            return getattr(role_based_permission, key)
+    # Use generator expression with next() for faster lookup
+    role_based_permission = next(
+        (rbp for rbp in role_based_permissions if rbp.role == rbac_role),
+        None,
+    )
+    if role_based_permission is not None:
+        return getattr(role_based_permission, key)
 
     return None
 
