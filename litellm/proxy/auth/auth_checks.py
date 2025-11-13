@@ -58,6 +58,8 @@ from litellm.utils import get_utc_datetime
 from .auth_checks_organization import organization_role_based_access_check
 from .auth_utils import get_model_from_request
 
+_pattern_cache = {}
+
 if TYPE_CHECKING:
     from opentelemetry.trace import Span as _Span
 
@@ -1829,8 +1831,11 @@ def is_model_allowed_by_pattern(model: str, allowed_model_pattern: str) -> bool:
         bool: True if model matches the pattern, False otherwise
     """
     if "*" in allowed_model_pattern:
-        pattern = f"^{allowed_model_pattern.replace('*', '.*')}$"
-        return bool(re.match(pattern, model))
+        pattern = _pattern_cache.get(allowed_model_pattern)
+        if pattern is None:
+            pattern = re.compile(f"^{allowed_model_pattern.replace('*', '.*')}$")
+            _pattern_cache[allowed_model_pattern] = pattern
+        return bool(pattern.match(model))
 
     return False
 
