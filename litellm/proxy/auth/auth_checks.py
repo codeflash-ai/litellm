@@ -1396,17 +1396,17 @@ def _check_model_access_helper(
             model_name=model, team_id=team_id
         )
 
-    if (
-        len(access_groups) > 0 and llm_router is not None
-    ):  # check if token contains any model access groups
-        for idx, m in enumerate(
-            models
-        ):  # loop token models, if any of them are an access group add the access group
+    # Early return if any token-provided model is an access group
+    if access_groups and llm_router is not None:
+        for m in models:
             if m in access_groups:
                 return True
 
-    # Filter out models that are access_groups
-    filtered_models = [m for m in models if m not in access_groups]
+    # Filter out models that are access_groups only if necessary
+    access_group_keys = set(access_groups.keys()) if access_groups else set()
+    filtered_models = [m for m in models if m not in access_group_keys] if access_group_keys else models
+
+    # Fast path for team aliases
 
     if _model_in_team_aliases(model=model, team_model_aliases=team_model_aliases):
         return True
@@ -1416,15 +1416,18 @@ def _check_model_access_helper(
     ):
         return True
 
+
+    # Early grants if all_model_access or wildcard
+    filtered_model_set = set(filtered_models)
     all_model_access: bool = False
-
-    if (len(filtered_models) == 0 and len(models) == 0) or "*" in filtered_models:
+    if (not filtered_models and not models) or "*" in filtered_model_set:
         all_model_access = True
 
-    if SpecialModelNames.all_proxy_models.value in filtered_models:
+    if SpecialModelNames.all_proxy_models.value in filtered_model_set:
         all_model_access = True
 
-    if model is not None and model not in filtered_models and all_model_access is False:
+    # If model is not present and all_model_access is not granted, deny
+    if model is not None and model not in filtered_model_set and not all_model_access:
         return False
     return True
 
