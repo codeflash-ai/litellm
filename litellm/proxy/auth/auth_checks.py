@@ -314,22 +314,10 @@ def _is_api_route_allowed(
 
 
 def _is_user_proxy_admin(user_obj: Optional[LiteLLM_UserTable]):
-    if user_obj is None:
+    if user_obj is None or user_obj.user_role is None:
         return False
 
-    if (
-        user_obj.user_role is not None
-        and user_obj.user_role == LitellmUserRoles.PROXY_ADMIN.value
-    ):
-        return True
-
-    if (
-        user_obj.user_role is not None
-        and user_obj.user_role == LitellmUserRoles.PROXY_ADMIN.value
-    ):
-        return True
-
-    return False
+    return user_obj.user_role == LitellmUserRoles.PROXY_ADMIN.value
 
 
 def _is_allowed_route(
