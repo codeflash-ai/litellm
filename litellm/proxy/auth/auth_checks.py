@@ -365,13 +365,11 @@ def _allowed_routes_check(user_route: str, allowed_routes: list) -> bool:
     - allowed_routes: List[str|LiteLLMRoutes] - the list of allowed routes for the user.
     """
 
+    members = LiteLLMRoutes.__members__
     for allowed_route in allowed_routes:
-        if (
-            allowed_route in LiteLLMRoutes.__members__
-            and user_route in LiteLLMRoutes[allowed_route].value
-        ):
+        if allowed_route == user_route:
             return True
-        elif allowed_route == user_route:
+        elif allowed_route in members and user_route in members[allowed_route].value:
             return True
     return False
 
